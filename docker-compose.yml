@@ -1,0 +1,35 @@
+# docker-compose.yml
+services:
+  backend:
+    build: .
+    ports:
+      - "8005:8005"          # host:container  ← Clave de la Opción A
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    container_name: chatbot_backend
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    # Exponer Postgres en el host es opcional. Si lo quieres en 5435:
+    ports:
+      - "5435:5432"          # host:container (el contenedor escucha 5432)
+    env_file:
+      - .env
+    container_name: chatbot_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
