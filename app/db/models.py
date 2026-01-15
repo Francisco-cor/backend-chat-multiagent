@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Index, Boolean
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -16,3 +16,14 @@ class ConversationHistory(Base):
 
     def __repr__(self):
         return f"<ConversationHistory(session_id='{self.session_id}', role='{self.role}')>"
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean(), default=True)
+
+    def __repr__(self):
+        return f"<User(email='{self.email}')>"

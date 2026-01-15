@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     DATABASE_URL: str
     
+    # Security
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
     # Modelos soportados por la nueva API google-genai
     ALLOWED_MODELS: List[str] = [
         "gemini-2.5-pro",        # Balanceado

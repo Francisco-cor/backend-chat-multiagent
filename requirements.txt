@@ -9,3 +9,6 @@ sqlalchemy
 asyncpg
 openai>=1.120.0
 tenacity
+python-jose[cryptography]
+passlib[bcrypt]
+email-validator

@@ -9,6 +9,8 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.chat_service import ChatService
 from app.db.session import get_db
 from app.core.config import settings
+from app.api import deps
+from app.db.models import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ async def handle_chat_json(
     request_data: ChatRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
 ):
     """
     Endpoint principal para chat vía JSON.
@@ -88,6 +91,7 @@ async def handle_chat_json(
 async def handle_chat_with_upload(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
     session_id: str = Form(...),
     prompt: str = Form(...),
     model: Optional[str] = Form(None),
