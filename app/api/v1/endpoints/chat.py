@@ -9,7 +9,9 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.chat_service import ChatService
 from app.db.session import get_db
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.api import deps
+from app.db.models import User
 from app.db.models import User
 
 router = APIRouter()
@@ -32,9 +34,10 @@ def _validate_model_name(model_input: Optional[str]) -> str:
     return m
 
 @router.post("/", response_model=ChatResponse)
+@limiter.limit("5/minute")
 async def handle_chat_json(
-    request_data: ChatRequest,
     request: Request,
+    request_data: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -88,6 +91,7 @@ async def handle_chat_json(
 
 
 @router.post("/upload", response_model=ChatResponse)
+@limiter.limit("5/minute")
 async def handle_chat_with_upload(
     request: Request,
     db: AsyncSession = Depends(get_db),

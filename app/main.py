@@ -9,7 +9,11 @@ from app.core.config import settings
 from openai import OpenAI
 
 # IMPORT SDK NUEVO
-from google import genai
+from app.core.config import settings
+from app.core.rate_limit import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from openai import OpenAI
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +26,10 @@ app = FastAPI(
     description="Backend con google-genai v1.51 (Gemini 2.5/3.0) y GPT-5.",
     version="3.5.0",
 )
+
+# Conectar Limiter a la app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

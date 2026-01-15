@@ -12,3 +12,4 @@ tenacity
 python-jose[cryptography]
 passlib[bcrypt]
 email-validator
+slowapi
