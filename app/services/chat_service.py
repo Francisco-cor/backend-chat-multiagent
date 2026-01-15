@@ -5,6 +5,8 @@ from sqlalchemy import select
 from app.db.models import ConversationHistory
 from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, LLMProvider
 from app.core.config import settings
+from fastapi import HTTPException
+from openai import APIConnectionError, RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,14 @@ class ChatService:
             await save_message(session_id, "model", reply, db)
             return reply
 
+        except RateLimitError:
+            logger.warning(f"⏳ Rate Limit en proveedor LLM (Sess={session_id})")
+            raise HTTPException(status_code=429, detail="LLM Rate Limit Exceeded. Please try again later.")
+            
+        except APIConnectionError:
+            logger.error(f"🔌 Error de conexión con LLM (Sess={session_id})")
+            raise HTTPException(status_code=503, detail="LLM Provider Unavailable.")
+
         except Exception as e:
             logger.exception(f"🔥 Error critico en LLM: {e}")
-            raise e
+            raise HTTPException(status_code=500, detail="Internal Error processing chat.")

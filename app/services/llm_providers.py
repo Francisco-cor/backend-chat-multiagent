@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
 
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, RateLimitError, APIStatusError
 from app.db.models import ConversationHistory
 
 # Sistema Prompt global
@@ -120,14 +120,19 @@ class GoogleGeminiProvider(LLMProvider):
                 config=config
             )
 
-        response = await asyncio.to_thread(_call_sync)
+        try:
+            response = await asyncio.to_thread(_call_sync)
 
-        # 5. Extracción de texto (Grounding puede devolver partes sin texto si solo cita)
-        if response.text:
-            return response.text.strip()
-        
-        # Fallback si la respuesta es puramente metadata o tool usage (raro en chat puro)
-        return "Información procesada, pero no se generó texto verbal."
+            # 5. Extracción de texto (Grounding puede devolver partes sin texto si solo cita)
+            if response.text:
+                return response.text.strip()
+            
+            # Fallback si la respuesta es puramente metadata o tool usage (raro en chat puro)
+            return "Información procesada, pero no se generó texto verbal."
+            
+        except Exception as e:
+            # Capturamos errores de Google GenAI
+            raise RuntimeError(f"Google GenAI Error: {str(e)}")
 
 
 class OpenAIProvider(LLMProvider):
@@ -180,5 +185,11 @@ class OpenAIProvider(LLMProvider):
             )
             # Extracción para SDK >= 1.120
             return getattr(resp, "output_text", "") or resp.choices[0].message.content or ""
-        except Exception:
-            return "Error OpenAI Generation."
+        except RateLimitError:
+            raise  # Re-raise for service layer to handle (429)
+        except APIConnectionError:
+            raise  # Re-raise for service layer to handle (503)
+        except APIStatusError as e:
+            raise RuntimeError(f"OpenAI API Error: {e.status_code} - {e.message}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected OpenAI Error: {str(e)}")
