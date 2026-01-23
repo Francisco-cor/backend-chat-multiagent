@@ -13,11 +13,7 @@ from app.db.models import User
 from app.db.session import get_db
 from app.schemas.token import TokenPayload
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.ALLOWED_MODELS[0]}/api/v1/login/access-token" # This will be updated later
-)
-
-# Placeholder tokenUrl, ideally it should be dynamic or fixed
+# OAuth2 documentation link
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login"
 )
@@ -25,6 +21,10 @@ reusable_oauth2 = OAuth2PasswordBearer(
 async def get_current_user(
     db: AsyncSession = Depends(get_db), token: str = Depends(reusable_oauth2)
 ) -> User:
+    """
+    Retrieves the currently authenticated user from the JWT token.
+    Raises 403 if the token is invalid and 404 if the user doesn't exist.
+    """
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]

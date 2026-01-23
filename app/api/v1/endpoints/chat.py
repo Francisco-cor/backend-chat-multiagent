@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import logging
 from typing import Optional
 
@@ -12,24 +13,20 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.api import deps
 from app.db.models import User
-from app.db.models import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 def _validate_model_name(model_input: Optional[str]) -> str:
     """
-    Normaliza y valida el modelo solicitado contra la configuración permitida.
+    Normalizes and validates the requested model against allowed configuration.
     """
     m = (model_input or "gemini-2.5-pro").strip().lower()
     
-    # Si quieres ser estricto y rechazar modelos no listados en config:
+    # Check if the model is in the allowed set (Optimized lookup)
     if m not in settings.ALLOWED_MODELS:
-        # Opción A: Fallar
-        # raise HTTPException(status_code=422, detail=f"Modelo '{m}' no permitido.")
-        
-        # Opción B (Recomendada por ahora): Loggear warning y dejar pasar (o hacer fallback)
-        logger.warning(f"Modelo solicitado '{m}' no está en ALLOWED_MODELS explícitos.")
+        # Warning log for models not explicitly in ALLOWED_MODELS
+        logger.warning(f"Requested model '{m}' is not in explicit ALLOWED_MODELS.")
     
     return m
 
@@ -42,12 +39,12 @@ async def handle_chat_json(
     current_user: User = Depends(deps.get_current_user),
 ):
     """
-    Endpoint principal para chat vía JSON.
-    Soporta: Texto, Imágenes (base64), Archivos (base64) y Grounding (use_search).
+    Main endpoint for chat via JSON.
+    Supports: Text, Images (base64), Files (base64), and Grounding (use_search).
     """
     normalized_model = _validate_model_name(request_data.model)
 
-    # Preparar datos de imagen si existen
+    # Prepare image data if present
     image_data = None
     if request_data.image_base64 and request_data.image_mime_type:
         image_data = {
@@ -55,7 +52,7 @@ async def handle_chat_json(
             "mime_type": request_data.image_mime_type
         }
 
-    # Preparar datos de archivo si existen
+    # Prepare file data if present
     file_data = None
     if request_data.file_base64 and request_data.file_mime_type:
         file_data = {
@@ -64,7 +61,7 @@ async def handle_chat_json(
         }
 
     try:
-        # Delegamos toda la lógica al servicio orquestador
+        # Delegate logic to the orchestrator service
         reply = await ChatService.process_chat(
             session_id=request_data.session_id,
             prompt=request_data.prompt,
@@ -73,7 +70,7 @@ async def handle_chat_json(
             openai_client=getattr(request.app.state, "openai_client", None),
             image_data=image_data,
             file_data=file_data,
-            use_search=request_data.use_search  # <--- Pasamos el flag al servicio
+            use_search=request_data.use_search
         )
 
         return ChatResponse(
@@ -83,11 +80,11 @@ async def handle_chat_json(
         )
 
     except ValueError as ve:
-        # Errores de validación de negocio (ej. modelo desconocido en el provider)
+        # Business validation errors
         raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
-        logger.exception("Error procesando chat JSON")
-        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+        logger.exception("Error processing JSON chat")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
 
 @router.post("/upload", response_model=ChatResponse)
@@ -99,12 +96,11 @@ async def handle_chat_with_upload(
     session_id: str = Form(...),
     prompt: str = Form(...),
     model: Optional[str] = Form(None),
-    use_search: bool = Form(False),  # <--- Se recibe como campo de formulario
+    use_search: bool = Form(False),
     file: UploadFile = File(None),
 ):
     """
-    Endpoint para chat con subida de archivos binarios (multipart/form-data).
-    Ideal para Postman o clientes que suben archivos "drag & drop".
+    Endpoint for chat with binary file upload (multipart/form-data).
     """
     normalized_model = _validate_model_name(model)
 
@@ -113,8 +109,9 @@ async def handle_chat_with_upload(
 
     if file:
         try:
+            # Run blocking I/O and CPU operations in threads
             contents = await file.read()
-            b64_encoded = base64.b64encode(contents).decode("utf-8")
+            b64_encoded = await asyncio.to_thread(lambda: base64.b64encode(contents).decode("utf-8"))
             mime_type = file.content_type or "application/octet-stream"
 
             if mime_type.startswith("image/"):
@@ -122,7 +119,7 @@ async def handle_chat_with_upload(
             else:
                 file_data = {"data": b64_encoded, "mime_type": mime_type}
         except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Error leyendo el archivo subido: {e}")
+            raise HTTPException(status_code=422, detail=f"Error reading uploaded file: {e}")
 
     try:
         reply = await ChatService.process_chat(
@@ -145,5 +142,5 @@ async def handle_chat_with_upload(
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
-        logger.exception("Error procesando chat Upload")
-        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {e}")
+        logger.exception("Error processing Upload chat")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")

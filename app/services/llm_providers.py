@@ -3,17 +3,17 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
-# IMPORTACIÓN DEL NUEVO SDK 2025
+# IMPORT OF THE NEW 2025 SDK
 from google import genai
 from google.genai import types
 
 from openai import OpenAI, APIConnectionError, RateLimitError, APIStatusError
 from app.db.models import ConversationHistory
 
-# Sistema Prompt global
+# Global System Prompt
 SYSTEM_INSTRUCTION = """
-Eres una secretaria virtual profesional llamada 'Clara'. 
-Te comunicas en español o inglés. Sé concisa, proactiva y útil.
+You are a professional virtual assistant named 'Clara'.
+You communicate in Spanish or English. Be concise, proactive, and helpful.
 """
 
 class LLMProvider(ABC):
@@ -31,16 +31,16 @@ class LLMProvider(ABC):
 class GoogleGeminiProvider(LLMProvider):
     def __init__(self, model_name: str, api_key: str):
         self.model_name = model_name
-        # Inicialización del cliente unificado 2025
+        # Initialization of the unified 2025 client
         self.client = genai.Client(api_key=api_key)
         
     def _format_content(self, history: List[ConversationHistory]) -> List[types.Content]:
         """
-        Convierte historial DB a objetos types.Content del nuevo SDK.
+        Converts DB history to types.Content objects for the new SDK.
         """
         contents = []
         for m in history:
-            # Mapeo de roles: 'model' en BD -> 'model' en API, 'user' -> 'user'
+            # Role mapping: 'model' in DB -> 'model' in API, 'user' -> 'user'
             contents.append(
                 types.Content(
                     role=m.role,
@@ -58,16 +58,16 @@ class GoogleGeminiProvider(LLMProvider):
         use_search: bool = False
     ) -> str:
         
-        # 1. Configuración de Herramientas (Grounding 2025)
+        # 1. Tool Configuration (Grounding 2025)
         tools_config = []
         if use_search:
-            # Sintaxis nueva para Google Search
+            # New syntax for Google Search
             tools_config = [types.Tool(google_search=types.GoogleSearch())]
 
-        # 2. Configuración de Generación
+        # 2. Generation Configuration
         config = types.GenerateContentConfig(
             temperature=0.7,
-            system_instruction=SYSTEM_INSTRUCTION, # Se pasa en config, no en historial
+            system_instruction=SYSTEM_INSTRUCTION, # Passed in config, not in history
             tools=tools_config,
             safety_settings=[
                 types.SafetySetting(
@@ -77,18 +77,18 @@ class GoogleGeminiProvider(LLMProvider):
             ]
         )
 
-        # 3. Construir el historial + mensaje actual
-        # El nuevo SDK es stateless por defecto si usamos models.generate_content
-        # así que pasamos todo el contexto como 'contents'.
+        # 3. Build history + current message
+        # The new SDK is stateless by default if using models.generate_content
+        # so we pass the entire context as 'contents'.
         contents = self._format_content(history)
         
-        # Crear partes del mensaje actual del usuario
+        # Create current user message parts
         current_parts = [types.Part.from_text(text=prompt)]
         
-        # Manejo Multimodal (Nuevo SDK maneja bytes raw o base64)
+        # Multimodal handling (New SDK handles raw bytes or base64)
         if image_data:
-            # Decodificamos base64 a bytes
-            img_bytes = base64.b64decode(image_data["data"])
+            # Decode base64 to bytes asynchronously
+            img_bytes = await asyncio.to_thread(base64.b64decode, image_data["data"])
             current_parts.append(
                 types.Part.from_bytes(
                     data=img_bytes, 
@@ -96,7 +96,7 @@ class GoogleGeminiProvider(LLMProvider):
                 )
             )
         elif file_data:
-            file_bytes = base64.b64decode(file_data["data"])
+            file_bytes = await asyncio.to_thread(base64.b64decode, file_data["data"])
             current_parts.append(
                 types.Part.from_bytes(
                     data=file_bytes,
@@ -104,14 +104,12 @@ class GoogleGeminiProvider(LLMProvider):
                 )
             )
 
-        # Añadimos el mensaje actual al final
+        # Append current message at the end
         contents.append(types.Content(role="user", parts=current_parts))
 
-        # 4. Llamada Asíncrona (wrappeada en hilo o nativa si el SDK lo soporta)
-        # Nota: En v1.51, generate_content es sincrónico o tiene versión async separada.
-        # Usamos aio.to_thread para garantizar no bloqueo si usamos la llamada sync estándar,
-        # o client.aio.models.generate_content si usamos el cliente async.
-        # Asumiremos cliente estándar wrappeado para máxima compatibilidad.
+        # 4. Asynchronous Call (wrapped in thread for the synchronous SDK call)
+        # Note: In v1.51, generate_content has a sync version.
+        # We use aio.to_thread to ensure no blocking.
         
         def _call_sync():
             return self.client.models.generate_content(
@@ -123,15 +121,15 @@ class GoogleGeminiProvider(LLMProvider):
         try:
             response = await asyncio.to_thread(_call_sync)
 
-            # 5. Extracción de texto (Grounding puede devolver partes sin texto si solo cita)
+            # 5. Text extraction (Grounding might return parts without text)
             if response.text:
                 return response.text.strip()
             
-            # Fallback si la respuesta es puramente metadata o tool usage (raro en chat puro)
-            return "Información procesada, pero no se generó texto verbal."
+            # Fallback for purely metadata or tool usage responses
+            return "Processed information, but no verbal text was generated."
             
         except Exception as e:
-            # Capturamos errores de Google GenAI
+            # Capture Google GenAI errors
             raise RuntimeError(f"Google GenAI Error: {str(e)}")
 
 
@@ -170,7 +168,10 @@ class OpenAIProvider(LLMProvider):
             user_content.append({"type": "input_image", "image_base64": image_data["data"]})
         
         if file_data and file_data["mime_type"].startswith("text/"):
-             raw = base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+             # Decode and decode string in a thread to prevent blocking
+             raw = await asyncio.to_thread(
+                 lambda: base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+             )
              user_content.append({"type": "input_text", "text": f"File Content:\n{raw}"})
 
         messages.append({"role": "user", "content": user_content})
@@ -183,7 +184,7 @@ class OpenAIProvider(LLMProvider):
                 input=messages,
                 reasoning={"effort": self.effort}
             )
-            # Extracción para SDK >= 1.120
+            # Extraction for SDK >= 1.120
             return getattr(resp, "output_text", "") or resp.choices[0].message.content or ""
         except RateLimitError:
             raise  # Re-raise for service layer to handle (429)

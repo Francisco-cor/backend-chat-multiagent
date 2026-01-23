@@ -5,27 +5,27 @@ import platform
 import sys
 
 print("=" * 60)
-print("--- INICIANDO SCRIPT DE DEPURACIÓN DEFINITIVO ---")
+print("--- STARTING FINAL DEBUG SCRIPT ---")
 print(f"Python version: {sys.version}")
 print(f"Platform: {platform.platform()}")
 print("-" * 60)
 
 try:
-    print(f"Versión de 'google-generativeai' instalada: {genai.__version__}")
+    print(f"Installed 'google-generativeai' version: {genai.__version__}")
 except Exception as e:
-    print(f"ERROR: No se pudo obtener la versión de la librería. ¿Está instalada? {e}")
+    print(f"ERROR: Could not get library version. Is it installed? {e}")
 
 print("-" * 60)
-print("Intentando acceder a 'genai.Client'...")
+print("Attempting to access 'genai.Client'...")
 
 if hasattr(genai, 'Client'):
-    print("✅✅✅ ÉXITO: El atributo 'genai.Client' FUE ENCONTRADO.")
-    print("   Esto significa que la versión de la librería es la correcta.")
+    print("✅✅✅ SUCCESS: 'genai.Client' attribute FOUND.")
+    print("   This confirms the correct library version is installed.")
 else:
-    print("❌❌❌ FALLO: El atributo 'genai.Client' NO FUE ENCONTRADO.")
-    print("   Esto confirma que la versión de la librería instalada es DEMASIADO ANTIGUA.")
-    print("\nListando todo lo que hay disponible en 'google.generativeai':")
-    # Esto nos mostrará todo lo que Python puede ver dentro del módulo
+    print("❌❌❌ FAILURE: 'genai.Client' attribute NOT FOUND.")
+    print("   This indicates the installed library version is TOO OLD.")
+    print("\nListing available attributes in 'google.generativeai':")
+    # Show available module attributes for debugging
     print(dir(genai))
 
 print("=" * 60)

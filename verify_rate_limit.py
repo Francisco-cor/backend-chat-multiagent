@@ -27,7 +27,7 @@ def test_rate_limit():
         except Exception as e:
             print(f"Error: {e}")
         
-        # Pequeña pausa
+        # Small pause
         time.sleep(0.5)
 
 if __name__ == "__main__":

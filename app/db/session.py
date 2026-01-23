@@ -2,15 +2,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
-# Motor de base de datos asíncrono
+# Asynchronous database engine
 engine = create_async_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
     future=True,
 )
 
-# Fábrica de sesiones asíncronas
-# Clave: expire_on_commit=False para evitar re-accesos perezosos tras commit (causa común del error xd2s)
+# Asynchronous session factory
+# Note: expire_on_commit=False prevents lazy loading issues after commit
 AsyncSessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -20,7 +20,7 @@ AsyncSessionLocal = sessionmaker(
     future=True,
 )
 
-# Dependencia para inyectar la sesión en los endpoints
+# Dependency to inject the database session into endpoints
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session

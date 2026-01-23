@@ -7,11 +7,11 @@ class ConversationHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String, nullable=False, index=True)
-    role = Column(String, nullable=False)  # "user" o "model"
+    role = Column(String, nullable=False)  # "user" or "model"
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Índice compuesto para acelerar las búsquedas por sesión y fecha
+    # Composite index to speed up searches by session and date
     __table_args__ = (Index('ix_session_id_timestamp', "session_id", "timestamp"),)
 
     def __repr__(self):
