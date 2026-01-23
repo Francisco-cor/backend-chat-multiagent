@@ -88,7 +88,7 @@ class GoogleGeminiProvider(LLMProvider):
         # Manejo Multimodal (Nuevo SDK maneja bytes raw o base64)
         if image_data:
             # Decodificamos base64 a bytes
-            img_bytes = base64.b64decode(image_data["data"])
+            img_bytes = await asyncio.to_thread(lambda: base64.b64decode(image_data["data"]))
             current_parts.append(
                 types.Part.from_bytes(
                     data=img_bytes, 
@@ -96,7 +96,7 @@ class GoogleGeminiProvider(LLMProvider):
                 )
             )
         elif file_data:
-            file_bytes = base64.b64decode(file_data["data"])
+            file_bytes = await asyncio.to_thread(lambda: base64.b64decode(file_data["data"]))
             current_parts.append(
                 types.Part.from_bytes(
                     data=file_bytes,
@@ -170,7 +170,7 @@ class OpenAIProvider(LLMProvider):
             user_content.append({"type": "input_image", "image_base64": image_data["data"]})
         
         if file_data and file_data["mime_type"].startswith("text/"):
-             raw = base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+             raw = await asyncio.to_thread(lambda: base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000])
              user_content.append({"type": "input_text", "text": f"File Content:\n{raw}"})
 
         messages.append({"role": "user", "content": user_content})

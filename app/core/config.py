@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     DATABASE_URL: str
     
+    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+
     # Security
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

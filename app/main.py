@@ -7,13 +7,14 @@ from app.db.base import Base
 from app.db.session import engine
 from app.core.config import settings
 from openai import OpenAI
+import google.genai as genai
 
-# IMPORT SDK NUEVO
-from app.core.config import settings
+# Import models for DB creation
+from app.db.models import User, ConversationHistory  # noqa
+
 from app.core.rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from openai import OpenAI
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +34,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

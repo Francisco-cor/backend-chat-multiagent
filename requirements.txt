@@ -10,6 +10,11 @@ asyncpg
 openai>=1.120.0
 tenacity
 python-jose[cryptography]
-passlib[bcrypt]
+passlib
+bcrypt==3.2.2
 email-validator
 slowapi
+pytest
+pytest-asyncio
+httpx
+aiosqlite
