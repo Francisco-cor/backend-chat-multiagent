@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List, Set
+from typing import List, Set, Any
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
@@ -23,9 +23,11 @@ class Settings(BaseSettings):
         "gpt-5-high"
     ]
 
-    @property
-    def ALLOWED_MODELS(self) -> Set[str]:
-        """Returns the allowed models as a set for O(1) lookup."""
-        return set(self.ALLOWED_MODELS_LIST)
+    # Pre-computed set for O(1) lookup
+    ALLOWED_MODELS: Set[str] = set()
+
+    def __init__(self, **values: Any):
+        super().__init__(**values)
+        self.ALLOWED_MODELS = set(self.ALLOWED_MODELS_LIST)
 
 settings = Settings()
