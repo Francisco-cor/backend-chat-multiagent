@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import logging
 from typing import Optional
 
@@ -11,7 +12,6 @@ from app.db.session import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.api import deps
-from app.db.models import User
 from app.db.models import User
 
 router = APIRouter()
@@ -114,7 +114,7 @@ async def handle_chat_with_upload(
     if file:
         try:
             contents = await file.read()
-            b64_encoded = base64.b64encode(contents).decode("utf-8")
+            b64_encoded = await asyncio.to_thread(lambda: base64.b64encode(contents).decode("utf-8"))
             mime_type = file.content_type or "application/octet-stream"
 
             if mime_type.startswith("image/"):
