@@ -1,5 +1,6 @@
 import logging
 import sys
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
@@ -18,29 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
-app = FastAPI(
-    title="Chatbot API (GenAI 2025 Standard)",
-    description="Backend with google-genai v1.51 (Gemini 2.5/3.0) and GPT-5.",
-    version="3.5.0",
-)
 
-# Connect Limiter to the app
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
-# Only enable it when specific trusted origins are configured.
-_allow_credentials = "*" not in settings.CORS_ORIGINS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=_allow_credentials,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     logger.info("🚀 STARTUP: Booting system...")
     logger.info(f"🐍 Python {sys.version}")
 
@@ -57,8 +38,7 @@ async def on_startup() -> None:
     try:
         if not settings.GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY missing")
-        # Simple client instantiation test
-        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        genai.Client(api_key=settings.GOOGLE_API_KEY)
         logger.info("✅ Google GenAI Client (v1.51+): Configured.")
     except Exception as e:
         logger.error(f"❌ Google Client Error: {e}")
@@ -71,6 +51,31 @@ async def on_startup() -> None:
         except Exception as e:
             logger.error(f"❌ OpenAI Error: {e}")
             app.state.openai_client = None
+
+    yield  # app runs here
+
+
+app = FastAPI(
+    title="Chatbot API (GenAI 2025 Standard)",
+    description="Backend with google-genai v1.51 (Gemini 2.5/3.0) and GPT-5.",
+    version="3.5.0",
+    lifespan=lifespan,
+)
+
+# Connect Limiter to the app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
+# Only enable it when specific trusted origins are configured.
+_allow_credentials = "*" not in settings.CORS_ORIGINS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=_allow_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include the API router
 app.include_router(api_router, prefix="/api/v1")

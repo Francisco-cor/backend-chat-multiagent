@@ -21,17 +21,26 @@ router = APIRouter()
 @limiter.limit("3/minute")
 async def login_access_token(
     request: Request,
-    db: AsyncSession = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
+    *,
+    db: AsyncSession = Depends(get_db),
+    form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests.
     """
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalars().first()
-    
-    if not user or not await security.verify_password(form_data.password, user.hashed_password):
+
+    if not user:
+        # Always run a dummy hash verification so "user not found" and "wrong password"
+        # take the same time — prevents user-enumeration via timing side-channel.
+        await security.verify_password(form_data.password, "$2b$12$dummyhashfortimingXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXu")
         raise HTTPException(status_code=400, detail="Incorrect email or password")
-    elif not user.is_active:
+
+    if not await security.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+
+    if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
