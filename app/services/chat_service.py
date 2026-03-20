@@ -3,10 +3,11 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.models import ConversationHistory
-from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, LLMProvider
+from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, ClaudeProvider, LLMProvider
 from app.core.config import settings
 from fastapi import HTTPException
 from openai import APIConnectionError, RateLimitError
+import anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,16 @@ class ChatService:
         model_lower = model_name.lower()
         
         if "gemini" in model_lower:
-            # Handles gemini-2.5-pro, gemini-3.0-pro-preview, etc.
             return GoogleGeminiProvider(model_name=model_name, api_key=settings.GOOGLE_API_KEY)
-        
+
         elif "gpt" in model_lower:
             return OpenAIProvider(model_name=model_name, client=openai_client)
-        
+
+        elif "claude" in model_lower:
+            if not settings.ANTHROPIC_API_KEY:
+                raise ValueError("ANTHROPIC_API_KEY is not configured.")
+            return ClaudeProvider(model_name=model_name, api_key=settings.ANTHROPIC_API_KEY)
+
         raise ValueError(f"Model not supported: {model_name}")
 
     @staticmethod
@@ -94,11 +99,11 @@ class ChatService:
 
             return reply
 
-        except RateLimitError:
+        except (RateLimitError, anthropic.RateLimitError):
             logger.warning(f"⏳ Rate Limit in LLM provider (Sess={session_id})")
             raise HTTPException(status_code=429, detail="LLM Rate Limit Exceeded. Please try again later.")
-            
-        except APIConnectionError:
+
+        except (APIConnectionError, anthropic.APIConnectionError):
             logger.error(f"🔌 Connection error with LLM (Sess={session_id})")
             raise HTTPException(status_code=503, detail="LLM Provider Unavailable.")
 

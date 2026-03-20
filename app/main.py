@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from google import genai
 from openai import OpenAI
+import anthropic
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +52,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"❌ OpenAI Error: {e}")
             app.state.openai_client = None
+
+    # 4) Anthropic check
+    if settings.ANTHROPIC_API_KEY:
+        try:
+            anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            logger.info("✅ Anthropic Client: Ready.")
+        except Exception as e:
+            logger.error(f"❌ Anthropic Error: {e}")
 
     yield  # app runs here
 

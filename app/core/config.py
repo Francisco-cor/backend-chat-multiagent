@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     GOOGLE_API_KEY: str
     OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
     DATABASE_URL: str
 
     # Security configuration
@@ -17,14 +18,19 @@ class Settings(BaseSettings):
     # Wildcard "*" disables credentials automatically (browser enforces this).
     CORS_ORIGINS: List[str] = ["*"]
 
-    # Supported models for the new google-genai API (2025 Standard)
+    # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
-        "gemini-2.5-pro",        # Balanced
-        "gemini-2.5-flash",      # Fast / Economical
-        "gemini-2.5-flash-lite", # Edge / Ultra Low Latency
-        "gemini-3.0-pro-preview",# SOTA Experimental
-        "gpt-5-low",
-        "gpt-5-high"
+        # Google Gemini
+        "gemini-3.1-pro",        # Balanced / High capability
+        "gemini-3-flash",        # Fast / Economical (no 3.1 version)
+        "gemini-3.1-flash-lite", # Edge / Ultra Low Latency
+        # OpenAI GPT-5.4 (effort: low / medium / high via Responses API)
+        "gpt-5.4-mini",          # Low reasoning effort
+        "gpt-5.4-medium",        # Medium reasoning effort
+        "gpt-5.4-high",          # High reasoning effort
+        # Anthropic Claude
+        "claude-sonnet-4-6",     # Sonnet 4.6 — balanced
+        "claude-haiku-4-5",      # Haiku 4.5 — fast / economical
     ]
 
     # Pre-computed set for O(1) lookup

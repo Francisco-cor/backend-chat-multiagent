@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from openai import OpenAI, APIConnectionError, RateLimitError, APIStatusError
+import anthropic
 from app.db.models import ConversationHistory
 
 # Global System Prompt
@@ -135,9 +136,21 @@ class GoogleGeminiProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     def __init__(self, model_name: str, client: OpenAI):
-        # Extract reasoning effort from the model alias (e.g. "gpt-5-low" → effort="low", model="gpt-5")
-        self.effort = "low" if "low" in model_name else "high"
-        self.model_name = model_name.replace("-low", "").replace("-high", "").strip()
+        # Map model alias to reasoning effort and base model name.
+        # e.g. "gpt-5.4-mini" → effort="low", model="gpt-5.4"
+        if "mini" in model_name:
+            self.effort = "low"
+        elif "medium" in model_name:
+            self.effort = "medium"
+        else:
+            self.effort = "high"
+        self.model_name = (
+            model_name
+            .replace("-mini", "")
+            .replace("-medium", "")
+            .replace("-high", "")
+            .strip()
+        )
         self.client = client
 
     def _format_history(self, history: List[ConversationHistory]) -> List[Dict[str, Any]]:
@@ -194,3 +207,66 @@ class OpenAIProvider(LLMProvider):
             raise RuntimeError(f"OpenAI API Error: {e.status_code} - {e.message}")
         except Exception as e:
             raise RuntimeError(f"Unexpected OpenAI Error: {str(e)}")
+
+
+class ClaudeProvider(LLMProvider):
+    def __init__(self, model_name: str, api_key: str):
+        self.model_name = model_name
+        # Map short alias to real Anthropic model ID
+        _model_map = {
+            "claude-sonnet-4-6": "claude-sonnet-4-6",
+            "claude-haiku-4-5":  "claude-haiku-4-5-20251001",
+        }
+        self.model_id = _model_map.get(model_name, model_name)
+        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    def _format_history(self, history: List[ConversationHistory]) -> List[Dict[str, Any]]:
+        messages = []
+        for m in history:
+            role = "assistant" if m.role == "model" else "user"
+            messages.append({"role": role, "content": m.content})
+        return messages
+
+    async def generate(
+        self,
+        prompt: str,
+        history: List[ConversationHistory],
+        image_data: Optional[Dict[str, str]] = None,
+        file_data: Optional[Dict[str, str]] = None,
+        use_search: bool = False,
+    ) -> str:
+        messages = self._format_history(history)
+
+        user_content: List[Dict[str, Any]] = []
+
+        if image_data:
+            user_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image_data["mime_type"],
+                    "data": image_data["data"],
+                },
+            })
+
+        if file_data and file_data["mime_type"].startswith("text/"):
+            raw = base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+            user_content.append({"type": "text", "text": f"File Content:\n{raw}"})
+
+        user_content.append({"type": "text", "text": prompt})
+        messages.append({"role": "user", "content": user_content})
+
+        try:
+            response = await self.client.messages.create(
+                model=self.model_id,
+                max_tokens=8096,
+                system=SYSTEM_INSTRUCTION.strip(),
+                messages=messages,
+            )
+            return response.content[0].text
+        except (anthropic.RateLimitError, anthropic.APIConnectionError):
+            raise  # Caught by service layer
+        except anthropic.APIStatusError as e:
+            raise RuntimeError(f"Claude API Error: {e.status_code} - {e.message}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected Claude Error: {str(e)}")

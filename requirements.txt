@@ -8,6 +8,7 @@ python-multipart
 sqlalchemy
 asyncpg
 openai>=1.120.0
+anthropic>=0.40.0
 tenacity
 python-jose[cryptography]
 passlib[bcrypt]
