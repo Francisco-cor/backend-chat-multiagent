@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, asc
 from app.db.models import ConversationHistory
 from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, ClaudeProvider, LLMProvider
 from app.core.config import settings
@@ -14,16 +14,23 @@ logger = logging.getLogger(__name__)
 # DB Helpers
 async def get_history(session_id: str, db: AsyncSession, limit: int = settings.HISTORY_LIMIT):
     """
-    Retrieves message history for a session. 
-    Reduced limit to 15 to accommodate long contexts of modern LLMs.
+    Returns the most recent `limit` messages in chronological (asc) order.
+    Uses a subquery to select the N newest rows first, then re-orders asc
+    so the LLM receives context in the correct temporal sequence.
     """
-    result = await db.execute(
-        select(ConversationHistory)
+    newest_ids = (
+        select(ConversationHistory.id)
         .where(ConversationHistory.session_id == session_id)
         .order_by(ConversationHistory.timestamp.desc())
         .limit(limit)
+        .scalar_subquery()
     )
-    return list(reversed(result.scalars().all()))
+    result = await db.execute(
+        select(ConversationHistory)
+        .where(ConversationHistory.id.in_(newest_ids))
+        .order_by(asc(ConversationHistory.timestamp))
+    )
+    return result.scalars().all()
 
 async def save_message(session_id: str, role: str, content: str, db: AsyncSession):
     """

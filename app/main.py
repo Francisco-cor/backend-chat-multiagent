@@ -3,6 +3,7 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 from app.core.logging import configure_logging
+from app.core.request_id import RequestIDMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -78,6 +79,8 @@ app = FastAPI(
 # Connect Limiter to the app
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(RequestIDMiddleware)
 
 # allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
 # Only enable it when specific trusted origins are configured.
