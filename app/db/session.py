@@ -6,7 +6,6 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    future=True,
 )
 
 # Asynchronous session factory
@@ -17,7 +16,6 @@ AsyncSessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     expire_on_commit=False,
-    future=True,
 )
 
 # Dependency to inject the database session into endpoints

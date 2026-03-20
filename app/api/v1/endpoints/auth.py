@@ -76,6 +76,10 @@ async def register_user(
         is_active=user_in.is_active,
     )
     db.add(db_obj)
-    await db.commit()
-    await db.refresh(db_obj)
+    try:
+        await db.commit()
+        await db.refresh(db_obj)
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Could not create user.")
     return db_obj

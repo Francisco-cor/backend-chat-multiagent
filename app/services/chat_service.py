@@ -30,7 +30,11 @@ async def save_message(session_id: str, role: str, content: str, db: AsyncSessio
     """
     msg = ConversationHistory(session_id=session_id, role=role, content=content)
     db.add(msg)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
 class ChatService:
     @staticmethod
@@ -67,20 +71,27 @@ class ChatService:
         logger.info(f"🧠 Processing: Sess={session_id} | Mod={model_name} | Search={use_search}")
 
         history = await get_history(session_id, db)
-        await save_message(session_id, "user", prompt, db)
 
         try:
             provider = ChatService.get_provider(model_name, openai_client)
-            
+
             reply = await provider.generate(
-                prompt=prompt, 
-                history=history, 
-                image_data=image_data, 
+                prompt=prompt,
+                history=history,
+                image_data=image_data,
                 file_data=file_data,
                 use_search=use_search
             )
 
-            await save_message(session_id, "model", reply, db)
+            # Save both messages only after a successful LLM response so the DB
+            # never contains an orphaned user message without a model reply.
+            await save_message(session_id, "user", prompt, db)
+            try:
+                await save_message(session_id, "model", reply, db)
+            except Exception:
+                logger.error(f"Failed to persist model reply for session {session_id}")
+                # The client still receives the reply even if persistence fails.
+
             return reply
 
         except RateLimitError:

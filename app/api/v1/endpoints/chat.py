@@ -112,7 +112,8 @@ async def handle_chat_with_upload(
         try:
             # Run blocking I/O and CPU operations in threads
             contents = await file.read()
-            b64_encoded = await asyncio.to_thread(lambda: base64.b64encode(contents).decode("utf-8"))
+            b64_bytes = await asyncio.to_thread(base64.b64encode, contents)
+            b64_encoded = b64_bytes.decode("utf-8")
             mime_type = file.content_type or "application/octet-stream"
 
             if mime_type.startswith("image/"):
