@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # Wildcard "*" disables credentials automatically (browser enforces this).
     CORS_ORIGINS: List[str] = ["*"]
 
+    # Maximum number of past messages loaded as context for each LLM request
+    HISTORY_LIMIT: int = 15
+
+    # Set to false for plain-text logs during local development
+    JSON_LOGS: bool = True
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini

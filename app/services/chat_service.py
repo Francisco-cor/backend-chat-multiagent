@@ -12,7 +12,7 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 # DB Helpers
-async def get_history(session_id: str, db: AsyncSession, limit: int = 15):
+async def get_history(session_id: str, db: AsyncSession, limit: int = settings.HISTORY_LIMIT):
     """
     Retrieves message history for a session. 
     Reduced limit to 15 to accommodate long contexts of modern LLMs.

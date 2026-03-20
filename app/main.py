@@ -1,11 +1,14 @@
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
+from app.core.logging import configure_logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from alembic.config import Config as AlembicConfig
+from alembic import command as alembic_command
 from app.api.v1.api import api_router
-from app.db.base import Base
 from app.db.session import engine
 from app.core.config import settings
 from app.core.rate_limit import limiter
@@ -15,10 +18,7 @@ from google import genai
 from openai import AsyncOpenAI
 import anthropic
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+configure_logging(json_logs=settings.JSON_LOGS)
 logger = logging.getLogger("main")
 
 
@@ -27,13 +27,16 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 STARTUP: Booting system...")
     logger.info(f"🐍 Python {sys.version}")
 
-    # 1) Database initialization — fatal: app cannot serve requests without a DB.
+    # 1) Run Alembic migrations — fatal: app cannot serve requests without a DB.
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ DB: Tables synchronized.")
+        def _run_migrations():
+            cfg = AlembicConfig("alembic.ini")
+            alembic_command.upgrade(cfg, "head")
+
+        await asyncio.to_thread(_run_migrations)
+        logger.info("✅ DB: Migrations applied.")
     except Exception as e:
-        logger.critical(f"❌ DB ERROR: {e}")
+        logger.critical(f"❌ DB MIGRATION ERROR: {e}")
         sys.exit(1)
 
     # 2) Google GenAI (SDK 2025 Check)
