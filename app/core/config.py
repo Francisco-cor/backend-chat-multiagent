@@ -7,12 +7,16 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str
     OPENAI_API_KEY: str | None = None
     DATABASE_URL: str
-    
+
     # Security configuration
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+
+    # CORS — set specific origins in production (e.g. "https://app.example.com,https://admin.example.com")
+    # Wildcard "*" disables credentials automatically (browser enforces this).
+    CORS_ORIGINS: List[str] = ["*"]
+
     # Supported models for the new google-genai API (2025 Standard)
     ALLOWED_MODELS_LIST: List[str] = [
         "gemini-2.5-pro",        # Balanced

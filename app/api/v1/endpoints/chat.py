@@ -20,14 +20,16 @@ logger = logging.getLogger(__name__)
 def _validate_model_name(model_input: Optional[str]) -> str:
     """
     Normalizes and validates the requested model against allowed configuration.
+    Raises HTTP 400 if the model is not in the allowed set.
     """
     m = (model_input or "gemini-2.5-pro").strip().lower()
-    
-    # Check if the model is in the allowed set (Optimized lookup)
+
     if m not in settings.ALLOWED_MODELS:
-        # Warning log for models not explicitly in ALLOWED_MODELS
-        logger.warning(f"Requested model '{m}' is not in explicit ALLOWED_MODELS.")
-    
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{m}' is not allowed. Allowed: {sorted(settings.ALLOWED_MODELS)}"
+        )
+
     return m
 
 @router.post("/", response_model=ChatResponse)
@@ -80,11 +82,10 @@ async def handle_chat_json(
         )
 
     except ValueError as ve:
-        # Business validation errors
         raise HTTPException(status_code=422, detail=str(ve))
-    except Exception as e:
+    except Exception:
         logger.exception("Error processing JSON chat")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/upload", response_model=ChatResponse)
@@ -141,6 +142,6 @@ async def handle_chat_with_upload(
 
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
-    except Exception as e:
+    except Exception:
         logger.exception("Error processing Upload chat")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

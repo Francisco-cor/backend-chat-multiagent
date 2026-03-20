@@ -135,18 +135,19 @@ class GoogleGeminiProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     def __init__(self, model_name: str, client: OpenAI):
-        self.model_name = "gpt-5" 
+        # Extract reasoning effort from the model alias (e.g. "gpt-5-low" → effort="low", model="gpt-5")
         self.effort = "low" if "low" in model_name else "high"
+        self.model_name = model_name.replace("-low", "").replace("-high", "").strip()
         self.client = client
 
     def _format_history(self, history: List[ConversationHistory]) -> List[Dict[str, Any]]:
-        messages = [
-            {"role": "system", "content": [{"type": "input_text", "text": SYSTEM_INSTRUCTION}]}
+        # Responses API: system message uses plain string content
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_INSTRUCTION.strip()}
         ]
         for m in history:
             role = "assistant" if m.role == "model" else "user"
-            ctype = "output_text" if role == "assistant" else "input_text"
-            messages.append({"role": role, "content": [{"type": ctype, "text": m.content}]})
+            messages.append({"role": role, "content": m.content})
         return messages
 
     async def generate(
@@ -176,7 +177,7 @@ class OpenAIProvider(LLMProvider):
 
         messages.append({"role": "user", "content": user_content})
 
-        # Responses API (GPT-5)
+        # Responses API (GPT-5 / o-series) — uses client.responses.create, not chat.completions
         try:
             resp = await asyncio.to_thread(
                 self.client.responses.create,
@@ -184,8 +185,7 @@ class OpenAIProvider(LLMProvider):
                 input=messages,
                 reasoning={"effort": self.effort}
             )
-            # Extraction for SDK >= 1.120
-            return getattr(resp, "output_text", "") or resp.choices[0].message.content or ""
+            return resp.output_text or ""
         except RateLimitError:
             raise  # Re-raise for service layer to handle (429)
         except APIConnectionError:

@@ -6,14 +6,10 @@ from app.api.v1.api import api_router
 from app.db.base import Base
 from app.db.session import engine
 from app.core.config import settings
-from openai import OpenAI
-
-# NEW SDK IMPORT
-from google import genai
-from app.core.config import settings
 from app.core.rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from google import genai
 from openai import OpenAI
 
 logging.basicConfig(
@@ -32,10 +28,13 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
+# Only enable it when specific trusted origins are configured.
+_allow_credentials = "*" not in settings.CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,13 +44,14 @@ async def on_startup() -> None:
     logger.info("🚀 STARTUP: Booting system...")
     logger.info(f"🐍 Python {sys.version}")
 
-    # 1) Database initialization
+    # 1) Database initialization — fatal: app cannot serve requests without a DB.
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("✅ DB: Tables synchronized.")
     except Exception as e:
         logger.critical(f"❌ DB ERROR: {e}")
+        sys.exit(1)
 
     # 2) Google GenAI (SDK 2025 Check)
     try:
