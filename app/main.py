@@ -1,8 +1,9 @@
 import logging
 import sys
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.api.v1.api import api_router
 from app.db.base import Base
 from app.db.session import engine
@@ -11,7 +12,7 @@ from app.core.rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from google import genai
-from openai import OpenAI
+from openai import AsyncOpenAI
 import anthropic
 
 logging.basicConfig(
@@ -47,7 +48,7 @@ async def lifespan(app: FastAPI):
     # 3) OpenAI check
     if settings.OPENAI_API_KEY:
         try:
-            app.state.openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            app.state.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
             logger.info("✅ OpenAI Client: Ready.")
         except Exception as e:
             logger.error(f"❌ OpenAI Error: {e}")
@@ -89,10 +90,20 @@ app.add_middleware(
 # Include the API router
 app.include_router(api_router, prefix="/api/v1")
 
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Liveness + readiness probe. Verifies DB connectivity."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+
 @app.get("/", tags=["Root"])
 def read_root():
     return {
         "status": "online",
         "stack": "FastAPI + Google GenAI SDK 1.51",
-        "models": settings.ALLOWED_MODELS
     }

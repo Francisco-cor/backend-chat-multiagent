@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.models import ConversationHistory
@@ -110,3 +110,57 @@ class ChatService:
         except Exception as e:
             logger.exception(f"🔥 Critical error in LLM: {e}")
             raise HTTPException(status_code=500, detail="Internal Error processing chat.")
+
+    @staticmethod
+    async def process_chat_stream(
+        session_id: str,
+        prompt: str,
+        model_name: str,
+        db: AsyncSession,
+        openai_client=None,
+        image_data: Optional[dict] = None,
+        file_data: Optional[dict] = None,
+        use_search: bool = False,
+    ):
+        """
+        Async generator that streams LLM response chunks.
+        Persists user + model messages to DB after the stream completes.
+        """
+        logger.info(f"🌊 Streaming: Sess={session_id} | Mod={model_name}")
+
+        history = await get_history(session_id, db)
+
+        try:
+            provider = ChatService.get_provider(model_name, openai_client)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+        full_reply: List[str] = []
+        try:
+            async for chunk in provider.generate_stream(
+                prompt=prompt,
+                history=history,
+                image_data=image_data,
+                file_data=file_data,
+                use_search=use_search,
+            ):
+                full_reply.append(chunk)
+                yield chunk
+
+        except (RateLimitError, anthropic.RateLimitError):
+            logger.warning(f"⏳ Rate Limit in stream (Sess={session_id})")
+            raise HTTPException(status_code=429, detail="LLM Rate Limit Exceeded.")
+        except (APIConnectionError, anthropic.APIConnectionError):
+            logger.error(f"🔌 Connection error in stream (Sess={session_id})")
+            raise HTTPException(status_code=503, detail="LLM Provider Unavailable.")
+        except Exception as e:
+            logger.exception(f"🔥 Stream error: {e}")
+            raise HTTPException(status_code=500, detail="Internal Error processing stream.")
+        finally:
+            if full_reply:
+                reply_text = "".join(full_reply)
+                await save_message(session_id, "user", prompt, db)
+                try:
+                    await save_message(session_id, "model", reply_text, db)
+                except Exception:
+                    logger.error(f"Failed to persist streamed reply for session {session_id}")

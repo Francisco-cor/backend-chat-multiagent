@@ -1,9 +1,11 @@
 import base64
 import asyncio
+import json
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Form, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.chat import ChatRequest, ChatResponse
@@ -146,3 +148,50 @@ async def handle_chat_with_upload(
     except Exception:
         logger.exception("Error processing Upload chat")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/stream")
+@limiter.limit("5/minute")
+async def handle_chat_stream(
+    request: Request,
+    request_data: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """
+    Streaming chat via Server-Sent Events (text/event-stream).
+    Each chunk is sent as: data: {"delta": "<text>"}\n\n
+    The stream ends with: data: [DONE]\n\n
+    """
+    normalized_model = _validate_model_name(request_data.model)
+
+    image_data = None
+    if request_data.image_base64 and request_data.image_mime_type:
+        image_data = {"data": request_data.image_base64, "mime_type": request_data.image_mime_type}
+
+    file_data = None
+    if request_data.file_base64 and request_data.file_mime_type:
+        file_data = {"data": request_data.file_base64, "mime_type": request_data.file_mime_type}
+
+    async def event_generator():
+        try:
+            async for chunk in ChatService.process_chat_stream(
+                session_id=request_data.session_id,
+                prompt=request_data.prompt,
+                model_name=normalized_model,
+                db=db,
+                openai_client=getattr(request.app.state, "openai_client", None),
+                image_data=image_data,
+                file_data=file_data,
+                use_search=request_data.use_search,
+            ):
+                yield f"data: {json.dumps({'delta': chunk})}\n\n"
+        except HTTPException as e:
+            yield f"data: {json.dumps({'error': e.detail})}\n\n"
+        except Exception:
+            logger.exception("Error in stream event generator")
+            yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

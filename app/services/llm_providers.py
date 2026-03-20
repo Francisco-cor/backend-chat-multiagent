@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from google import genai
 from google.genai import types
 
-from openai import OpenAI, APIConnectionError, RateLimitError, APIStatusError
+from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusError
 import anthropic
 from app.db.models import ConversationHistory
 
@@ -25,9 +25,21 @@ class LLMProvider(ABC):
         history: List[ConversationHistory],
         image_data: Optional[Dict[str, str]] = None,
         file_data: Optional[Dict[str, str]] = None,
-        use_search: bool = False
+        use_search: bool = False,
     ) -> str:
         pass
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        history: List[ConversationHistory],
+        image_data: Optional[Dict[str, str]] = None,
+        file_data: Optional[Dict[str, str]] = None,
+        use_search: bool = False,
+    ):
+        """Default: yield the full response as a single chunk (non-streaming fallback)."""
+        result = await self.generate(prompt, history, image_data, file_data, use_search)
+        yield result
 
 class GoogleGeminiProvider(LLMProvider):
     def __init__(self, model_name: str, api_key: str):
@@ -133,9 +145,45 @@ class GoogleGeminiProvider(LLMProvider):
             # Capture Google GenAI errors
             raise RuntimeError(f"Google GenAI Error: {str(e)}")
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        history: List[ConversationHistory],
+        image_data: Optional[Dict[str, str]] = None,
+        file_data: Optional[Dict[str, str]] = None,
+        use_search: bool = False,
+    ):
+        tools_config = [types.Tool(google_search=types.GoogleSearch())] if use_search else []
+        config = types.GenerateContentConfig(
+            temperature=0.7,
+            system_instruction=SYSTEM_INSTRUCTION,
+            tools=tools_config,
+            safety_settings=[
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH")
+            ],
+        )
+        contents = self._format_content(history)
+        current_parts = [types.Part.from_text(text=prompt)]
+        if image_data:
+            img_bytes = await asyncio.to_thread(base64.b64decode, image_data["data"])
+            current_parts.append(types.Part.from_bytes(data=img_bytes, mime_type=image_data["mime_type"]))
+        elif file_data:
+            file_bytes = await asyncio.to_thread(base64.b64decode, file_data["data"])
+            current_parts.append(types.Part.from_bytes(data=file_bytes, mime_type=file_data["mime_type"]))
+        contents.append(types.Content(role="user", parts=current_parts))
+
+        try:
+            async for chunk in self.client.aio.models.generate_content_stream(
+                model=self.model_name, contents=contents, config=config
+            ):
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            raise RuntimeError(f"Google GenAI Stream Error: {str(e)}")
+
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, model_name: str, client: OpenAI):
+    def __init__(self, model_name: str, client: AsyncOpenAI):
         # Map model alias to reasoning effort and base model name.
         # e.g. "gpt-5.4-mini" → effort="low", model="gpt-5.4"
         if "mini" in model_name:
@@ -190,23 +238,58 @@ class OpenAIProvider(LLMProvider):
 
         messages.append({"role": "user", "content": user_content})
 
-        # Responses API (GPT-5 / o-series) — uses client.responses.create, not chat.completions
+        # Responses API (GPT-5 / o-series) — async client, no asyncio.to_thread needed
         try:
-            resp = await asyncio.to_thread(
-                self.client.responses.create,
+            resp = await self.client.responses.create(
                 model=self.model_name,
                 input=messages,
-                reasoning={"effort": self.effort}
+                reasoning={"effort": self.effort},
             )
             return resp.output_text or ""
         except RateLimitError:
-            raise  # Re-raise for service layer to handle (429)
+            raise
         except APIConnectionError:
-            raise  # Re-raise for service layer to handle (503)
+            raise
         except APIStatusError as e:
             raise RuntimeError(f"OpenAI API Error: {e.status_code} - {e.message}")
         except Exception as e:
             raise RuntimeError(f"Unexpected OpenAI Error: {str(e)}")
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        history: List[ConversationHistory],
+        image_data: Optional[Dict[str, str]] = None,
+        file_data: Optional[Dict[str, str]] = None,
+        use_search: bool = False,
+    ):
+        messages = self._format_history(history)
+        user_content = [{"type": "input_text", "text": prompt}]
+        if image_data:
+            user_content.append({"type": "input_image", "image_base64": image_data["data"]})
+        if file_data and file_data["mime_type"].startswith("text/"):
+            raw = base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+            user_content.append({"type": "input_text", "text": f"File Content:\n{raw}"})
+        messages.append({"role": "user", "content": user_content})
+
+        try:
+            async with self.client.responses.stream(
+                model=self.model_name,
+                input=messages,
+                reasoning={"effort": self.effort},
+            ) as stream:
+                async for event in stream:
+                    delta = getattr(event, "output_text_delta", None)
+                    if delta:
+                        yield delta
+        except RateLimitError:
+            raise
+        except APIConnectionError:
+            raise
+        except APIStatusError as e:
+            raise RuntimeError(f"OpenAI Stream Error: {e.status_code} - {e.message}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected OpenAI Stream Error: {str(e)}")
 
 
 class ClaudeProvider(LLMProvider):
@@ -270,3 +353,40 @@ class ClaudeProvider(LLMProvider):
             raise RuntimeError(f"Claude API Error: {e.status_code} - {e.message}")
         except Exception as e:
             raise RuntimeError(f"Unexpected Claude Error: {str(e)}")
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        history: List[ConversationHistory],
+        image_data: Optional[Dict[str, str]] = None,
+        file_data: Optional[Dict[str, str]] = None,
+        use_search: bool = False,
+    ):
+        messages = self._format_history(history)
+        user_content: List[Dict[str, Any]] = []
+        if image_data:
+            user_content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": image_data["mime_type"], "data": image_data["data"]},
+            })
+        if file_data and file_data["mime_type"].startswith("text/"):
+            raw = base64.b64decode(file_data["data"]).decode("utf-8", errors="ignore")[:5000]
+            user_content.append({"type": "text", "text": f"File Content:\n{raw}"})
+        user_content.append({"type": "text", "text": prompt})
+        messages.append({"role": "user", "content": user_content})
+
+        try:
+            async with self.client.messages.stream(
+                model=self.model_id,
+                max_tokens=8096,
+                system=SYSTEM_INSTRUCTION.strip(),
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        except (anthropic.RateLimitError, anthropic.APIConnectionError):
+            raise
+        except anthropic.APIStatusError as e:
+            raise RuntimeError(f"Claude Stream Error: {e.status_code} - {e.message}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected Claude Stream Error: {str(e)}")

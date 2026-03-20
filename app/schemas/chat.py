@@ -5,11 +5,11 @@ class ChatRequest(BaseModel):
     """
     Input payload for /api/v1/chat/ (JSON).
     """
-    session_id: str = Field(..., min_length=1, description="Unique identifier for the chat session")
-    prompt: str = Field(..., min_length=1, description="The user's message")
-    
-    # If not provided, the backend uses the configured default (gemini-2.5-pro)
-    model: Optional[str] = Field(None, description="Example: gemini-2.5-pro, gemini-2.5-flash, gpt-5-low")
+    session_id: str = Field(..., min_length=1, max_length=128, description="Unique identifier for the chat session")
+    prompt: str = Field(..., min_length=1, max_length=32000, description="The user's message")
+
+    # If not provided, the backend uses the configured default (gemini-3.1-pro)
+    model: Optional[str] = Field(None, description="Example: gemini-3.1-pro, gpt-5.4-mini, claude-sonnet-4-6")
     
     # Enable Google Grounding (Web search)
     use_search: bool = Field(False, description="If True, allows the model to perform a Google Search.")
