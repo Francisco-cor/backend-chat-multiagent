@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Index, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Index, Boolean, ForeignKey
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -10,9 +10,13 @@ class ConversationHistory(Base):
     role = Column(String, nullable=False)  # "user" or "model"
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
-    # Composite index to speed up searches by session and date
-    __table_args__ = (Index('ix_session_id_timestamp', "session_id", "timestamp"),)
+    # Composite indexes for efficient history queries
+    __table_args__ = (
+        Index('ix_session_id_timestamp', "session_id", "timestamp"),
+        Index('ix_conv_history_user_session', "user_id", "session_id", "timestamp"),
+    )
 
     def __repr__(self):
         return f"<ConversationHistory(session_id='{self.session_id}', role='{self.role}')>"

@@ -17,6 +17,10 @@ from app.schemas.token import Token
 
 router = APIRouter()
 
+# Pre-computed at import time so "user not found" and "wrong password" take the same time,
+# preventing user-enumeration via timing side-channel.
+_DUMMY_HASH: str = security.pwd_context.hash("__dummy_timing__")
+
 @router.post("/login", response_model=Token)
 @limiter.limit("3/minute")
 async def login_access_token(
@@ -34,7 +38,7 @@ async def login_access_token(
     if not user:
         # Always run a dummy hash verification so "user not found" and "wrong password"
         # take the same time — prevents user-enumeration via timing side-channel.
-        await security.verify_password(form_data.password, "$2b$12$dummyhashfortimingXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXu")
+        await security.verify_password(form_data.password, _DUMMY_HASH)
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
     if not await security.verify_password(form_data.password, user.hashed_password):

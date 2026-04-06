@@ -25,8 +25,8 @@ logger = logging.getLogger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 STARTUP: Booting system...")
-    logger.info(f"🐍 Python {sys.version}")
+    logger.info("STARTUP: Booting system...")
+    logger.info(f"Python {sys.version}")
 
     # 1) Run Alembic migrations — fatal: app cannot serve requests without a DB.
     try:
@@ -35,9 +35,9 @@ async def lifespan(app: FastAPI):
             alembic_command.upgrade(cfg, "head")
 
         await asyncio.to_thread(_run_migrations)
-        logger.info("✅ DB: Migrations applied.")
+        logger.info("DB: Migrations applied.")
     except Exception as e:
-        logger.critical(f"❌ DB MIGRATION ERROR: {e}")
+        logger.critical(f"DB MIGRATION ERROR: {e}")
         sys.exit(1)
 
     # 2) Google GenAI (SDK 2025 Check)
@@ -45,26 +45,26 @@ async def lifespan(app: FastAPI):
         if not settings.GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY missing")
         genai.Client(api_key=settings.GOOGLE_API_KEY)
-        logger.info("✅ Google GenAI Client (v1.51+): Configured.")
+        logger.info("Google GenAI Client (v1.51+): Configured.")
     except Exception as e:
-        logger.error(f"❌ Google Client Error: {e}")
+        logger.error(f"Google Client Error: {e}")
 
     # 3) OpenAI check
     if settings.OPENAI_API_KEY:
         try:
             app.state.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            logger.info("✅ OpenAI Client: Ready.")
+            logger.info("OpenAI Client: Ready.")
         except Exception as e:
-            logger.error(f"❌ OpenAI Error: {e}")
+            logger.error(f"OpenAI Error: {e}")
             app.state.openai_client = None
 
     # 4) Anthropic check
     if settings.ANTHROPIC_API_KEY:
         try:
             anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-            logger.info("✅ Anthropic Client: Ready.")
+            logger.info("Anthropic Client: Ready.")
         except Exception as e:
-            logger.error(f"❌ Anthropic Error: {e}")
+            logger.error(f"Anthropic Error: {e}")
 
     yield  # app runs here
 

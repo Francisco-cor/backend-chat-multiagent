@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # Set to false for plain-text logs during local development
     JSON_LOGS: bool = True
 
+    # Maximum size of uploaded files in MB (enforced before reading into memory)
+    MAX_UPLOAD_SIZE_MB: int = 10
+
+    # Timeout in seconds for LLM API calls (applies to non-streaming generate())
+    LLM_TIMEOUT_SECONDS: int = 60
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini

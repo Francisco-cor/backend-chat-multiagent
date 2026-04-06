@@ -12,15 +12,17 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 # DB Helpers
-async def get_history(session_id: str, db: AsyncSession, limit: int = settings.HISTORY_LIMIT):
+async def get_history(session_id: str, db: AsyncSession, user_id: int, limit: int = settings.HISTORY_LIMIT):
     """
-    Returns the most recent `limit` messages in chronological (asc) order.
-    Uses a subquery to select the N newest rows first, then re-orders asc
-    so the LLM receives context in the correct temporal sequence.
+    Returns the most recent `limit` messages for the given user+session in
+    chronological (asc) order. Filters by user_id to enforce data isolation.
     """
     newest_ids = (
         select(ConversationHistory.id)
-        .where(ConversationHistory.session_id == session_id)
+        .where(
+            ConversationHistory.session_id == session_id,
+            ConversationHistory.user_id == user_id,
+        )
         .order_by(ConversationHistory.timestamp.desc())
         .limit(limit)
         .scalar_subquery()
@@ -32,17 +34,32 @@ async def get_history(session_id: str, db: AsyncSession, limit: int = settings.H
     )
     return result.scalars().all()
 
-async def save_message(session_id: str, role: str, content: str, db: AsyncSession):
+
+async def save_exchange(
+    session_id: str,
+    user_msg: str,
+    model_reply: str,
+    db: AsyncSession,
+    user_id: int,
+) -> None:
     """
-    Saves a new message to the conversation history.
+    Saves both the user message and model reply in a single atomic commit.
+    If the commit fails both rows are rolled back together.
     """
-    msg = ConversationHistory(session_id=session_id, role=role, content=content)
-    db.add(msg)
+    user_record = ConversationHistory(
+        session_id=session_id, role="user", content=user_msg, user_id=user_id
+    )
+    model_record = ConversationHistory(
+        session_id=session_id, role="model", content=model_reply, user_id=user_id
+    )
+    db.add(user_record)
+    db.add(model_record)
     try:
         await db.commit()
     except Exception:
         await db.rollback()
         raise
+
 
 class ChatService:
     @staticmethod
@@ -51,7 +68,7 @@ class ChatService:
         Factory method to return the appropriate LLM provider based on model name.
         """
         model_lower = model_name.lower()
-        
+
         if "gemini" in model_lower:
             return GoogleGeminiProvider(model_name=model_name, api_key=settings.GOOGLE_API_KEY)
 
@@ -71,18 +88,19 @@ class ChatService:
         prompt: str,
         model_name: str,
         db: AsyncSession,
+        user_id: int,
         openai_client=None,
         image_data: Optional[dict] = None,
         file_data: Optional[dict] = None,
         use_search: bool = False
     ) -> str:
         """
-        Orchestrates the chat process: fetches history, saves user message, 
-        generates reply from LLM, and saves model response.
+        Orchestrates the chat process: fetches history, generates reply from LLM,
+        and atomically saves user message + model response.
         """
-        logger.info(f"🧠 Processing: Sess={session_id} | Mod={model_name} | Search={use_search}")
+        logger.info(f"Processing: Sess={session_id} | Mod={model_name} | Search={use_search}")
 
-        history = await get_history(session_id, db)
+        history = await get_history(session_id, db, user_id=user_id)
 
         try:
             provider = ChatService.get_provider(model_name, openai_client)
@@ -95,27 +113,32 @@ class ChatService:
                 use_search=use_search
             )
 
-            # Save both messages only after a successful LLM response so the DB
-            # never contains an orphaned user message without a model reply.
-            await save_message(session_id, "user", prompt, db)
+            # Save both messages atomically after a successful LLM response.
             try:
-                await save_message(session_id, "model", reply, db)
+                await save_exchange(session_id, prompt, reply, db, user_id=user_id)
             except Exception:
-                logger.error(f"Failed to persist model reply for session {session_id}")
+                logger.error(f"Failed to persist exchange for session {session_id}")
                 # The client still receives the reply even if persistence fails.
 
             return reply
 
         except (RateLimitError, anthropic.RateLimitError):
-            logger.warning(f"⏳ Rate Limit in LLM provider (Sess={session_id})")
+            logger.warning(f"Rate limit hit in LLM provider (Sess={session_id})")
             raise HTTPException(status_code=429, detail="LLM Rate Limit Exceeded. Please try again later.")
 
         except (APIConnectionError, anthropic.APIConnectionError):
-            logger.error(f"🔌 Connection error with LLM (Sess={session_id})")
+            logger.error(f"Connection error with LLM (Sess={session_id})")
             raise HTTPException(status_code=503, detail="LLM Provider Unavailable.")
 
+        except RuntimeError as e:
+            if "timed out" in str(e).lower():
+                logger.warning(f"LLM request timed out (Sess={session_id})")
+                raise HTTPException(status_code=503, detail="LLM request timed out.")
+            logger.exception(f"Critical error in LLM: {e}")
+            raise HTTPException(status_code=500, detail="Internal Error processing chat.")
+
         except Exception as e:
-            logger.exception(f"🔥 Critical error in LLM: {e}")
+            logger.exception(f"Critical error in LLM: {e}")
             raise HTTPException(status_code=500, detail="Internal Error processing chat.")
 
     @staticmethod
@@ -124,6 +147,7 @@ class ChatService:
         prompt: str,
         model_name: str,
         db: AsyncSession,
+        user_id: int,
         openai_client=None,
         image_data: Optional[dict] = None,
         file_data: Optional[dict] = None,
@@ -131,11 +155,11 @@ class ChatService:
     ):
         """
         Async generator that streams LLM response chunks.
-        Persists user + model messages to DB after the stream completes.
+        Persists user + model messages to DB atomically after the stream completes.
         """
-        logger.info(f"🌊 Streaming: Sess={session_id} | Mod={model_name}")
+        logger.info(f"Streaming: Sess={session_id} | Mod={model_name}")
 
-        history = await get_history(session_id, db)
+        history = await get_history(session_id, db, user_id=user_id)
 
         try:
             provider = ChatService.get_provider(model_name, openai_client)
@@ -155,19 +179,18 @@ class ChatService:
                 yield chunk
 
         except (RateLimitError, anthropic.RateLimitError):
-            logger.warning(f"⏳ Rate Limit in stream (Sess={session_id})")
+            logger.warning(f"Rate limit hit in stream (Sess={session_id})")
             raise HTTPException(status_code=429, detail="LLM Rate Limit Exceeded.")
         except (APIConnectionError, anthropic.APIConnectionError):
-            logger.error(f"🔌 Connection error in stream (Sess={session_id})")
+            logger.error(f"Connection error in stream (Sess={session_id})")
             raise HTTPException(status_code=503, detail="LLM Provider Unavailable.")
         except Exception as e:
-            logger.exception(f"🔥 Stream error: {e}")
+            logger.exception(f"Stream error: {e}")
             raise HTTPException(status_code=500, detail="Internal Error processing stream.")
         finally:
             if full_reply:
                 reply_text = "".join(full_reply)
-                await save_message(session_id, "user", prompt, db)
                 try:
-                    await save_message(session_id, "model", reply_text, db)
+                    await save_exchange(session_id, prompt, reply_text, db, user_id=user_id)
                 except Exception:
                     logger.error(f"Failed to persist streamed reply for session {session_id}")
