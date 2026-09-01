@@ -1,0 +1,88 @@
+import os
+import pytest
+from typing import AsyncGenerator
+
+# Set dummy env vars before importing app (Settings validates at import)
+os.environ.setdefault("GOOGLE_API_KEY", "test-google-key")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-long-12345")
+
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
+
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+engine = create_async_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,
+)
+
+TestingSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+)
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def prepare_database():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest.fixture
+async def db() -> AsyncGenerator[AsyncSession, None]:
+    async with TestingSessionLocal() as session:
+        yield session
+        await session.rollback()
+
+
+@pytest.fixture
+async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    async def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def auth_headers(client: AsyncClient):
+    """Register a user and return Authorization headers."""
+    import secrets
+
+    email = f"user_{secrets.token_hex(4)}@example.com"
+    password = "TestPass123!"
+
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": password},
+    )
+    resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": email, "password": password},
+    )
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
