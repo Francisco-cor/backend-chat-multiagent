@@ -13,6 +13,7 @@ from app.api.v1.api import api_router
 from app.db.session import engine
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.core.metrics import setup_metrics
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from google import genai
@@ -81,6 +82,9 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(RequestIDMiddleware)
+
+# Metrics must be added before CORS so it sees all requests
+setup_metrics(app)
 
 # allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
 # Only enable it when specific trusted origins are configured.
