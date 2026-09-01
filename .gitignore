@@ -179,3 +179,10 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Implementation plan (local only, not versioned)
+PLAN_ELEVACION.md
+
+# Local dev
+.coverage
+htmlcov/
