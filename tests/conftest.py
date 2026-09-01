@@ -39,18 +39,16 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture(scope="session", autouse=True)
-async def prepare_database():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+_tables_created = False
 
 
 @pytest.fixture
 async def db() -> AsyncGenerator[AsyncSession, None]:
+    global _tables_created
+    if not _tables_created:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        _tables_created = True
     async with TestingSessionLocal() as session:
         yield session
         await session.rollback()
@@ -62,10 +60,19 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    # Disable rate limiting for tests (in-memory limiter would hit 3/min across tests)
+    original_enabled = getattr(app.state.limiter, "enabled", True)
+    app.state.limiter.enabled = False
+    # Also reset storage if available
+    try:
+        app.state.limiter.storage.reset()  # type: ignore[attr-defined]
+    except Exception:
+        pass
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    app.state.limiter.enabled = original_enabled
 
 
 @pytest.fixture
