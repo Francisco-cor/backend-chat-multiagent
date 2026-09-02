@@ -88,13 +88,8 @@ class ConversationService:
         items = list(result.scalars().all())
         next_cursor = None
         if len(items) > limit:
-            next_cursor = items[-1].id
+            next_cursor = items[limit - 1].id
             items = items[:limit]
-        elif items:
-            # If exactly limit, next_cursor is last id if there may be more, else None via extra fetch
-            # We used limit+1, so if len == limit+1 we already handled, if len == limit but there could be more we need to know
-            # Our limit+1 handles this: if we got limit+1, we popped, else no next
-            pass
         return items, next_cursor
 
     @staticmethod
