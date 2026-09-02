@@ -4,6 +4,7 @@ import sys
 from contextlib import asynccontextmanager
 from app.core.logging import configure_logging
 from app.core.request_id import RequestIDMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -81,9 +82,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-app.add_middleware(RequestIDMiddleware)
-
-# Metrics must be added before CORS so it sees all requests
+# Metrics inner to CORS but outer to route — added first
 setup_metrics(app)
 
 # allow_credentials=True is unsafe with wildcard origins (any domain could hijack auth).
@@ -96,6 +95,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Security headers and request ID outermost — added last so they wrap all
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 # Include the API router
 app.include_router(api_router, prefix="/api/v1")
