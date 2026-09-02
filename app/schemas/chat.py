@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class ChatRequest(BaseModel):
     """
@@ -23,6 +23,14 @@ class ChatRequest(BaseModel):
     file_mime_type: Optional[str] = None
 
 
+class ChatUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cost_usd: float
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ChatResponse(BaseModel):
     """
     Standard chat response from the backend.
@@ -30,3 +38,4 @@ class ChatResponse(BaseModel):
     session_id: str
     reply: str
     model_used: str  # Returns which model was actually utilized
+    usage: Optional[ChatUsage] = None

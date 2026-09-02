@@ -9,8 +9,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Form, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest, ChatResponse, ChatUsage
 from app.services.chat_service import ChatService
+from app.services.token_counter import count_message_tokens, estimate_cost
 from app.db.session import get_db
 from app.core.config import settings
 from app.core.rate_limit import limiter
@@ -29,7 +30,8 @@ def _validate_model_name(model_input: Optional[str]) -> str:
     Normalizes and validates the requested model against allowed configuration.
     Raises HTTP 400 if the model is not in the allowed set.
     """
-    m = (model_input or "gemini-2.5-pro").strip().lower()
+    default_model = settings.ALLOWED_MODELS_LIST[0] if settings.ALLOWED_MODELS_LIST else "gemini-3.1-pro"
+    m = (model_input or default_model).strip().lower()
 
     if m not in settings.ALLOWED_MODELS:
         raise HTTPException(
@@ -93,10 +95,23 @@ async def handle_chat_json(
             use_search=request_data.use_search
         )
 
+        prompt_tokens = count_message_tokens(request_data.prompt, "user")
+        completion_tokens = count_message_tokens(reply, "model")
+        total_tokens = prompt_tokens + completion_tokens
+        cost_usd = estimate_cost(prompt_tokens, normalized_model) + estimate_cost(
+            completion_tokens, normalized_model
+        )
+        usage = ChatUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost_usd,
+        )
         return ChatResponse(
             session_id=request_data.session_id,
             reply=reply,
-            model_used=normalized_model
+            model_used=normalized_model,
+            usage=usage,
         )
 
     except ValueError as ve:
@@ -165,10 +180,23 @@ async def handle_chat_with_upload(
             use_search=use_search
         )
 
+        prompt_tokens = count_message_tokens(prompt, "user")
+        completion_tokens = count_message_tokens(reply, "model")
+        total_tokens = prompt_tokens + completion_tokens
+        cost_usd = estimate_cost(prompt_tokens, normalized_model) + estimate_cost(
+            completion_tokens, normalized_model
+        )
+        usage = ChatUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost_usd,
+        )
         return ChatResponse(
             session_id=session_id,
             reply=reply,
-            model_used=normalized_model
+            model_used=normalized_model,
+            usage=usage,
         )
 
     except ValueError as ve:
