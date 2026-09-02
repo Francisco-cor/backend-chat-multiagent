@@ -1,14 +1,20 @@
 import logging
-from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, asc
-from app.db.models import ConversationHistory
-from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, ClaudeProvider, LLMProvider
-from app.core.config import settings
-from app.services.conversation_service import ConversationService
+
+import anthropic
 from fastapi import HTTPException
 from openai import APIConnectionError, RateLimitError
-import anthropic
+from sqlalchemy import asc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.db.models import ConversationHistory
+from app.services.conversation_service import ConversationService
+from app.services.llm_providers import (
+    ClaudeProvider,
+    GoogleGeminiProvider,
+    LLMProvider,
+    OpenAIProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +149,52 @@ class ChatService:
         raise ValueError(f"Model not supported: {model_name}")
 
     @staticmethod
+    async def process_chat_orchestrated(
+        session_id: str,
+        prompt: str,
+        model_name: str,
+        db: AsyncSession,
+        user_id: int,
+        openai_client=None,
+        image_data: dict | None = None,
+        file_data: dict | None = None,
+        use_search: bool = False,
+        strategy: str = "auto",
+    ) -> tuple[str, list]:
+        """
+        Orchestrated multi-agent chat. Returns (reply, trace).
+        """
+        logger.info(f"Orchestrated: Sess={session_id} | Strat={strategy} | Prompt={prompt[:80]}")
+        history = await get_history(session_id, db, user_id=user_id)
+        try:
+            # Lazy import to avoid circular
+            from app.agents.orchestrator import SupervisorOrchestrator
+
+            orchestrator = SupervisorOrchestrator()
+            context = {
+                "openai_client": openai_client,
+                "image_data": image_data,
+                "file_data": file_data,
+                "model_name": model_name,
+                "use_search": use_search,
+            }
+            reply, trace = await orchestrator.orchestrate(
+                prompt, history, context=context, strategy=strategy
+            )
+            try:
+                await save_exchange(session_id, prompt, reply, db, user_id=user_id, model=model_name)
+            except Exception:
+                logger.error(f"Failed to persist orchestrated exchange {session_id}")
+            return reply, trace
+        except Exception as e:
+            logger.exception(f"Orchestrator failed, falling back to direct: {e}")
+            # Fallback to direct
+            reply = await ChatService.process_chat(
+                session_id, prompt, model_name, db, user_id, openai_client, image_data, file_data, use_search
+            )
+            return reply, [{"agent": "fallback", "output": reply}]
+
+    @staticmethod
     async def process_chat(
         session_id: str,
         prompt: str,
@@ -150,15 +202,28 @@ class ChatService:
         db: AsyncSession,
         user_id: int,
         openai_client=None,
-        image_data: Optional[dict] = None,
-        file_data: Optional[dict] = None,
+        image_data: dict | None = None,
+        file_data: dict | None = None,
         use_search: bool = False
     ) -> str:
         """
         Orchestrates the chat process: fetches history, generates reply from LLM,
         and atomically saves user message + model response.
+        If orchestrator is enabled and prompt triggers multi-agent, delegates.
         """
         logger.info(f"Processing: Sess={session_id} | Mod={model_name} | Search={use_search}")
+
+        # Auto-route to orchestrator if enabled and prompt suggests multi-agent
+        if settings.ORCHESTRATOR_ENABLED and any(
+            k in prompt.lower() for k in ["investiga", "analiza", "orchestrate", "research", "critic"]
+        ):
+            try:
+                reply, _ = await ChatService.process_chat_orchestrated(
+                    session_id, prompt, model_name, db, user_id, openai_client, image_data, file_data, use_search, strategy=settings.ORCHESTRATOR_STRATEGY
+                )
+                return reply
+            except Exception:
+                logger.warning("Orchestrator auto-route failed, using direct")
 
         history = await get_history(session_id, db, user_id=user_id)
 
@@ -209,8 +274,8 @@ class ChatService:
         db: AsyncSession,
         user_id: int,
         openai_client=None,
-        image_data: Optional[dict] = None,
-        file_data: Optional[dict] = None,
+        image_data: dict | None = None,
+        file_data: dict | None = None,
         use_search: bool = False,
     ):
         """
@@ -226,7 +291,7 @@ class ChatService:
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
-        full_reply: List[str] = []
+        full_reply: list[str] = []
         try:
             async for chunk in provider.generate_stream(
                 prompt=prompt,
@@ -254,3 +319,66 @@ class ChatService:
                     await save_exchange(session_id, prompt, reply_text, db, user_id=user_id, model=model_name)
                 except Exception:
                     logger.error(f"Failed to persist streamed reply for session {session_id}")
+
+    @staticmethod
+    async def process_chat_stream_orchestrated(
+        session_id: str,
+        prompt: str,
+        model_name: str,
+        db: AsyncSession,
+        user_id: int,
+        openai_client=None,
+        image_data: dict | None = None,
+        file_data: dict | None = None,
+        use_search: bool = False,
+        strategy: str = "auto",
+    ):
+        """
+        Orchestrated streaming via SupervisorOrchestrator.
+        Yields dict events {agent, event, delta}.
+        """
+        logger.info(f"Orchestrated stream: Sess={session_id} | Strat={strategy}")
+        history = await get_history(session_id, db, user_id=user_id)
+        full_reply: list[str] = []
+        try:
+            from app.agents.orchestrator import SupervisorOrchestrator
+
+            orchestrator = SupervisorOrchestrator()
+            context = {
+                "openai_client": openai_client,
+                "image_data": image_data,
+                "file_data": file_data,
+                "model_name": model_name,
+                "use_search": use_search,
+            }
+            async for event in orchestrator.orchestrate_stream(
+                prompt, history, context=context, strategy=strategy
+            ):
+                if event.get("event") == "delta" and event.get("delta"):
+                    full_reply.append(event["delta"])
+                yield event
+            # Persist after successful stream
+            if full_reply:
+                try:
+                    await save_exchange(
+                        session_id, prompt, "".join(full_reply), db, user_id=user_id, model=model_name
+                    )
+                except Exception:
+                    logger.error(f"Failed to persist orchestrated stream {session_id}")
+        except Exception as e:
+            logger.exception(f"Orchestrated stream failed: {e}")
+            # Fallback to direct stream
+            fallback_reply: list[str] = []
+            async for chunk in ChatService.process_chat_stream(
+                session_id, prompt, model_name, db, user_id, openai_client, image_data, file_data, use_search
+            ):
+                fallback_reply.append(chunk)
+                yield {"agent": "fallback", "event": "delta", "delta": chunk}
+            yield {"agent": "fallback", "event": "done", "delta": ""}
+            if fallback_reply:
+                try:
+                    await save_exchange(
+                        session_id, prompt, "".join(fallback_reply), db, user_id=user_id, model=model_name
+                    )
+                except Exception:
+                    logger.error(f"Failed to persist fallback stream {session_id}")

@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # Timeout in seconds for LLM API calls (applies to non-streaming generate())
     LLM_TIMEOUT_SECONDS: int = 60
 
+    # Orchestrator
+    ORCHESTRATOR_ENABLED: bool = True
+    ORCHESTRATOR_STRATEGY: str = "auto"  # auto | sequential | parallel | direct
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini
