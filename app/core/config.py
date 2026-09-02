@@ -87,6 +87,19 @@ class Settings(BaseSettings):
     # Optional DB pool size tuning
     DB_POOL_SIZE: int = 10
 
+    # Platform — Quotas & Billing (Fase 9)
+    QUOTA_FREE_TOKENS: int = 100_000  # per month
+    QUOTA_PRO_TOKENS: int = 1_000_000
+    QUOTA_ENTERPRISE_TOKENS: int = 10_000_000
+    # soft limit 80% triggers warning header, hard limit denies
+    QUOTA_SOFT_PCT: float = 0.8
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    BILLING_ENABLED: bool = False
+
+    # Rate limit (Fase 9.1) — per-principal sliding window fallback
+    CHAT_RATE_LIMIT: str = "5/minute"
+    API_KEY_RATE_LIMIT: str = "60/minute"
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini

@@ -4,20 +4,22 @@ import json
 import logging
 import re
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import registry
 from app.api import deps
 from app.core.config import settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import limiter, redis_sliding_window
 from app.db.models import User
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest, ChatResponse, ChatUsage
 from app.schemas.orchestration import AgentInfo, OrchestrateRequest, OrchestrateResponse
 from app.services.chat_service import ChatService
 from app.services.token_counter import count_message_tokens, estimate_cost
+from app.services import quota_service as quota_svc
+from app.services.billing_service import record_usage
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,10 +52,84 @@ def _validate_base64(data: str, field_name: str) -> None:
         raise HTTPException(status_code=422, detail=f"Invalid base64 encoding in field '{field_name}'")
 
 
+def _check_chat_write_scope(request: Request):
+    """Enforce chat:write scope for API keys (JWT bypass)."""
+    principal_type = getattr(request.state, "principal_type", None)
+    if principal_type == "api_key":
+        scopes = getattr(request.state, "api_key_scopes", []) or []
+        if "chat:write" not in scopes:
+            raise HTTPException(status_code=403, detail="Missing scope: chat:write")
+
+
+async def _enforce_redis_rate(request: Request, current_user: User):
+    """Per-principal sliding window via Redis (distributed) fallback to memory."""
+    key = getattr(request.state, "principal_id", None) or f"user:{current_user.id}"
+    # chat limit 5/min matches slowapi but distributed
+    allowed, remaining = await redis_sliding_window.is_allowed(f"chat:{key}", limit=5, window_seconds=60)
+    if not allowed:
+        from fastapi import HTTPException as HE
+
+        raise HE(
+            status_code=429,
+            detail="Rate limit exceeded (redis)",
+            headers={"Retry-After": "60", "X-RateLimit-Remaining": str(remaining)},
+        )
+    # stash for headers
+    request.state.rl_remaining = remaining
+
+
+async def _enforce_quota_check(request: Request, db: AsyncSession, current_user: User, prompt: str, response=None):
+    """Quota soft/hard + headers."""
+    prompt_tokens = count_message_tokens(prompt, "user")
+    info = await quota_svc.check_quota(db, current_user, tokens_needed=prompt_tokens)
+    if info["hard_hit"]:
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "Quota exceeded", "plan": getattr(current_user, "plan", "free"), "limit": info["limit"], "used": info["used"]},
+            headers={"Retry-After": "3600", "X-Quota-Remaining": str(info["remaining"]), "X-Quota-Limit": str(info["limit"])},
+        )
+    # headers
+    if response is not None:
+        response.headers["X-Quota-Remaining"] = str(info["remaining"])
+        response.headers["X-Quota-Limit"] = str(info["limit"])
+        response.headers["X-Quota-Used"] = str(info["used"])
+        if info["soft_hit"]:
+            response.headers["X-Quota-Warning"] = "soft-limit"
+    else:
+        # stash on request for streaming
+        request.state.quota_remaining = str(info["remaining"])
+        request.state.quota_limit = str(info["limit"])
+    return info
+
+
+async def _record_ledger(db: AsyncSession, request: Request, current_user: User, model: str, prompt: str, reply: str):
+    try:
+        prompt_tokens = count_message_tokens(prompt, "user")
+        completion_tokens = count_message_tokens(reply, "model")
+        cost = estimate_cost(prompt_tokens, model) + estimate_cost(completion_tokens, model)
+        api_key_id = getattr(request.state, "api_key_id", None) or getattr(getattr(request.state, "api_key", None), "id", None)
+        request_id = request.headers.get("x-request-id") or request.headers.get("X-Request-ID")
+        endpoint = request.url.path
+        await record_usage(
+            db,
+            user_id=current_user.id,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost,
+            api_key_id=api_key_id,
+            request_id=request_id,
+            endpoint=endpoint,
+        )
+    except Exception as e:
+        logger.warning(f"Ledger record failed: {e}")
+
+
 @router.post("/", response_model=ChatResponse)
 @limiter.limit("5/minute")
 async def handle_chat_json(
     request: Request,
+    response: Response,
     request_data: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -61,7 +137,11 @@ async def handle_chat_json(
     """
     Main endpoint for chat via JSON.
     Supports: Text, Images (base64), Files (base64), and Grounding (use_search).
+    Rate/Quota: redis sliding-window + monthly quota + billing ledger.
     """
+    _check_chat_write_scope(request)
+    await _enforce_redis_rate(request, current_user)
+    await _enforce_quota_check(request, db, current_user, request_data.prompt, response=response)
     normalized_model = _validate_model_name(request_data.model)
 
     # Validate and prepare image data
@@ -108,6 +188,11 @@ async def handle_chat_json(
             total_tokens=total_tokens,
             cost_usd=cost_usd,
         )
+        # billing ledger (async, best-effort)
+        await _record_ledger(db, request, current_user, normalized_model, request_data.prompt, reply)
+        # propagate rate-limit remaining header
+        if hasattr(request.state, "rl_remaining"):
+            response.headers["X-RateLimit-Remaining"] = str(request.state.rl_remaining)
         return ChatResponse(
             session_id=request_data.session_id,
             reply=reply,
@@ -117,6 +202,8 @@ async def handle_chat_json(
 
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Error processing JSON chat")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -126,6 +213,7 @@ async def handle_chat_json(
 @limiter.limit("5/minute")
 async def handle_chat_with_upload(
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
     session_id: str = Form(...),
@@ -137,6 +225,9 @@ async def handle_chat_with_upload(
     """
     Endpoint for chat with binary file upload (multipart/form-data).
     """
+    _check_chat_write_scope(request)
+    await _enforce_redis_rate(request, current_user)
+    await _enforce_quota_check(request, db, current_user, prompt, response=response)
     normalized_model = _validate_model_name(model)
 
     image_data = None
@@ -193,6 +284,9 @@ async def handle_chat_with_upload(
             total_tokens=total_tokens,
             cost_usd=cost_usd,
         )
+        await _record_ledger(db, request, current_user, normalized_model, prompt, reply)
+        if hasattr(request.state, "rl_remaining"):
+            response.headers["X-RateLimit-Remaining"] = str(request.state.rl_remaining)
         return ChatResponse(
             session_id=session_id,
             reply=reply,
@@ -202,6 +296,8 @@ async def handle_chat_with_upload(
 
     except ValueError as ve:
         raise HTTPException(status_code=422, detail=str(ve))
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Error processing Upload chat")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -227,6 +323,9 @@ async def handle_chat_stream(
     Each chunk is sent as: id: <n>\\ndata: {"delta": "<text>", "id": <n>}\\n\\n
     The stream ends with: data: [DONE]\\n\\n
     """
+    _check_chat_write_scope(request)
+    await _enforce_redis_rate(request, current_user)
+    # quota check will be done after audio transcription (need final prompt)
     normalized_model = _validate_model_name(request_data.model)
 
     image_data = None
@@ -253,12 +352,16 @@ async def handle_chat_stream(
         # If transcript dummy, just append; if real, replace prompt with transcript + prompt
         prompt = f"{transcript}\n\n{prompt}" if prompt else transcript
 
+    await _enforce_quota_check(request, db, current_user, prompt)
+
     # Parse Last-Event-ID for resume
     last_event_id_raw = request.headers.get("last-event-id") or request.headers.get("Last-Event-ID")
     try:
         last_event_id = int(last_event_id_raw) if last_event_id_raw else 0
     except ValueError:
         last_event_id = 0
+
+    full_reply_parts: list[str] = []
 
     async def inner_gen():
         async for chunk in ChatService.process_chat_stream(
@@ -272,6 +375,7 @@ async def handle_chat_stream(
             file_data=file_data,
             use_search=request_data.use_search,
         ):
+            full_reply_parts.append(chunk)
             yield chunk
 
     from app.services.stream_manager import resilient_stream
@@ -286,6 +390,9 @@ async def handle_chat_stream(
             ):
                 yield frame
                 # SSE spec: also yield heartbeat already inside manager
+            # billing after stream
+            if full_reply_parts:
+                await _record_ledger(db, request, current_user, normalized_model, prompt, "".join(full_reply_parts))
             yield "data: [DONE]\n\n"
         except HTTPException as e:
             yield f"data: {json.dumps({'error': e.detail})}\n\n"
@@ -295,7 +402,16 @@ async def handle_chat_stream(
             yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
             yield "data: [DONE]\n\n"
 
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "X-Quota-Remaining": getattr(request.state, "quota_remaining", ""),
+        "X-Quota-Limit": getattr(request.state, "quota_limit", ""),
+    }
+    # clean empty
+    headers = {k: v for k, v in headers.items() if v}
+    if hasattr(request.state, "rl_remaining"):
+        headers["X-RateLimit-Remaining"] = str(request.state.rl_remaining)
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
@@ -322,10 +438,14 @@ async def list_agents(
 @limiter.limit("5/minute")
 async def handle_orchestrate(
     request: Request,
+    response: Response,
     request_data: OrchestrateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
+    _check_chat_write_scope(request)
+    await _enforce_redis_rate(request, current_user)
+    await _enforce_quota_check(request, db, current_user, request_data.prompt, response=response)
     normalized_model = _validate_model_name(request_data.model)
     image_data = None
     if request_data.image_base64 and request_data.image_mime_type:
@@ -349,6 +469,9 @@ async def handle_orchestrate(
             use_search=request_data.use_search,
             strategy=request_data.strategy,
         )
+        await _record_ledger(db, request, current_user, normalized_model, request_data.prompt, reply)
+        if hasattr(request.state, "rl_remaining"):
+            response.headers["X-RateLimit-Remaining"] = str(request.state.rl_remaining)
         return OrchestrateResponse(
             session_id=request_data.session_id,
             reply=reply,
@@ -356,6 +479,8 @@ async def handle_orchestrate(
             strategy=request_data.strategy,
             model_used=normalized_model,
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Error in orchestrate")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -369,6 +494,9 @@ async def handle_orchestrate_stream(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
+    _check_chat_write_scope(request)
+    await _enforce_redis_rate(request, current_user)
+    await _enforce_quota_check(request, db, current_user, request_data.prompt)
     normalized_model = _validate_model_name(request_data.model)
     image_data = None
     if request_data.image_base64 and request_data.image_mime_type:
@@ -434,6 +562,7 @@ async def handle_orchestrate_stream(
 
         prod = _asyncio.create_task(producer())
         _counter = last_event_id or 0
+        full_deltas: list[str] = []
         try:
             while True:
                 try:
@@ -456,6 +585,10 @@ async def handle_orchestrate_stream(
 
                 payload = _json.dumps(item)
                 _buffers[buffer_key].append((_counter, payload))
+                # collect for billing
+                delta = item.get("delta") if isinstance(item, dict) else None
+                if delta:
+                    full_deltas.append(delta)
                 # SSE with event type = agent
                 agent = item.get("agent", "unknown")
                 yield f"id: {_counter}\nevent: {agent}\ndata: {payload}\n\n"
@@ -465,7 +598,20 @@ async def handle_orchestrate_stream(
                 await prod
             except _asyncio.CancelledError:
                 pass
+            if full_deltas:
+                try:
+                    await _record_ledger(db, request, current_user, normalized_model, request_data.prompt, "".join(full_deltas))
+                except Exception:
+                    pass
             yield "data: [DONE]\n\n"
 
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "X-Quota-Remaining": getattr(request.state, "quota_remaining", ""),
+        "X-Quota-Limit": getattr(request.state, "quota_limit", ""),
+    }
+    headers = {k: v for k, v in headers.items() if v}
+    if hasattr(request.state, "rl_remaining"):
+        headers["X-RateLimit-Remaining"] = str(request.state.rl_remaining)
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)

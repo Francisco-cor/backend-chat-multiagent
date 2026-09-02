@@ -8,7 +8,7 @@ from alembic import context
 
 # Import models so their metadata is registered on Base
 from app.db.base import Base
-from app.db.models import ConversationHistory, User  # noqa: F401
+from app.db.models import ConversationHistory, User, ApiKey, UsageLedger, AuditLog, Conversation, Message, Document, DocumentChunk  # noqa: F401
 from app.core.config import settings
 
 # Alembic Config object

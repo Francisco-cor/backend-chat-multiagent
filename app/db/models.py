@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Index, Boolean, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy import JSON as SA_JSON  # for pg jsonb / sqlite text compat
 from app.db.base import Base
 
 class ConversationHistory(Base):
@@ -29,11 +30,17 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean(), default=True)
+    is_superuser = Column(Boolean(), default=False, nullable=False, server_default="0")
+    plan = Column(String(20), default="free", nullable=False, server_default="free")  # free | pro | enterprise
     failed_login_attempts = Column(Integer, default=0, nullable=False, server_default="0")
     locked_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    usage = relationship("UsageLedger", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
 
     def __repr__(self):
-        return f"<User(email='{self.email}')>"
+        return f"<User(email='{self.email}', plan={self.plan})>"
 
 
 class RevokedToken(Base):
@@ -135,3 +142,70 @@ class DocumentChunk(Base):
 
     def __repr__(self):
         return f"<DocumentChunk(id={self.id}, doc={self.document_id}, idx={self.chunk_index})>"
+
+
+# ── Fase 9: Platform — API Keys, Quotas, Billing ──
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    # Store hashed key (sha256) for lookup; prefix for display
+    key_hash = Column(String(64), unique=True, nullable=False, index=True)
+    key_prefix = Column(String(12), nullable=False, index=True)  # e.g. sk_abc123
+    # scopes as JSON text — e.g. ["chat:write","chat:read"]
+    scopes = Column(Text, nullable=False, default="[]", server_default="[]")
+    is_active = Column(Boolean, default=True, nullable=False, server_default="1")
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="api_keys")
+
+    __table_args__ = (
+        Index("ix_api_keys_user_active", "user_id", "is_active"),
+        Index("ix_api_keys_prefix", "key_prefix"),
+    )
+
+    def __repr__(self):
+        return f"<ApiKey(id={self.id}, user_id={self.user_id}, prefix={self.key_prefix})>"
+
+
+class UsageLedger(Base):
+    __tablename__ = "usage_ledger"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    api_key_id = Column(Integer, ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True, index=True)
+    model = Column(String, nullable=True)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    # request tracking
+    request_id = Column(String, nullable=True, index=True)
+    endpoint = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    user = relationship("User", back_populates="usage")
+    api_key = relationship("ApiKey")
+
+    __table_args__ = (
+        Index("ix_usage_user_created", "user_id", "created_at"),
+        Index("ix_usage_user_model", "user_id", "model"),
+    )
+
+    def __repr__(self):
+        return f"<UsageLedger(id={self.id}, user_id={self.user_id}, tokens={self.total_tokens})>"
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, action={self.action})>"
