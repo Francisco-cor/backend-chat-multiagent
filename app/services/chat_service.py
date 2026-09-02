@@ -5,18 +5,40 @@ from sqlalchemy import select, asc
 from app.db.models import ConversationHistory
 from app.services.llm_providers import GoogleGeminiProvider, OpenAIProvider, ClaudeProvider, LLMProvider
 from app.core.config import settings
+from app.services.conversation_service import ConversationService
 from fastapi import HTTPException
 from openai import APIConnectionError, RateLimitError
 import anthropic
 
 logger = logging.getLogger(__name__)
 
-# DB Helpers
+# Legacy DB Helpers (kept for backward compat, now delegate to ConversationService)
 async def get_history(session_id: str, db: AsyncSession, user_id: int, limit: int = settings.HISTORY_LIMIT):
     """
     Returns the most recent `limit` messages for the given user+session in
     chronological (asc) order. Filters by user_id to enforce data isolation.
+    Delegates to ConversationService (new) with fallback to legacy table.
     """
+    # Try ConversationService (new schema)
+    try:
+        from app.db.models import Conversation
+
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.user_id == user_id,
+                Conversation.legacy_session_id == session_id,
+                Conversation.deleted_at.is_(None),
+            )
+        )
+        conv = conv_result.scalars().first()
+        if conv:
+            msgs = await ConversationService.get_history(db, user_id, conv.id, limit=limit)
+            if msgs:
+                return msgs
+    except Exception:
+        pass
+
+    # Fallback legacy
     newest_ids = (
         select(ConversationHistory.id)
         .where(
@@ -41,11 +63,49 @@ async def save_exchange(
     model_reply: str,
     db: AsyncSession,
     user_id: int,
+    model: str | None = None,
 ) -> None:
     """
-    Saves both the user message and model reply in a single atomic commit.
-    If the commit fails both rows are rolled back together.
+    Saves both the user message and model reply.
+    Writes to new Conversation/Message and legacy ConversationHistory for transition.
     """
+    # Try new schema
+    try:
+        from app.db.models import Conversation
+
+        conv_result = await db.execute(
+            select(Conversation).where(
+                Conversation.user_id == user_id,
+                Conversation.legacy_session_id == session_id,
+                Conversation.deleted_at.is_(None),
+            )
+        )
+        conv = conv_result.scalars().first()
+        if not conv:
+            conv = await ConversationService.get_or_create_conversation(
+                db, user_id, session_id, model=model, title=user_msg[:50]
+            )
+        await ConversationService.save_exchange(db, conv.id, user_id, user_msg, model_reply, model=model)
+        await db.commit()
+        # Also write legacy for back-compat (best-effort)
+        try:
+            user_record = ConversationHistory(
+                session_id=session_id, role="user", content=user_msg, user_id=user_id
+            )
+            model_record = ConversationHistory(
+                session_id=session_id, role="model", content=model_reply, user_id=user_id
+            )
+            db.add(user_record)
+            db.add(model_record)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+        return
+    except Exception as e:
+        logger.warning(f"New schema save failed, fallback to legacy: {e}")
+        await db.rollback()
+
+    # Fallback legacy
     user_record = ConversationHistory(
         session_id=session_id, role="user", content=user_msg, user_id=user_id
     )
@@ -115,7 +175,7 @@ class ChatService:
 
             # Save both messages atomically after a successful LLM response.
             try:
-                await save_exchange(session_id, prompt, reply, db, user_id=user_id)
+                await save_exchange(session_id, prompt, reply, db, user_id=user_id, model=model_name)
             except Exception:
                 logger.error(f"Failed to persist exchange for session {session_id}")
                 # The client still receives the reply even if persistence fails.
@@ -191,6 +251,6 @@ class ChatService:
             if full_reply:
                 reply_text = "".join(full_reply)
                 try:
-                    await save_exchange(session_id, prompt, reply_text, db, user_id=user_id)
+                    await save_exchange(session_id, prompt, reply_text, db, user_id=user_id, model=model_name)
                 except Exception:
                     logger.error(f"Failed to persist streamed reply for session {session_id}")
