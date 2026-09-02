@@ -93,3 +93,45 @@ class Message(Base):
 
     def __repr__(self):
         return f"<Message(id={self.id}, conv={self.conversation_id}, role={self.role})>"
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    source = Column(String, nullable=True)  # filename or url
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    total_chunks = Column(Integer, nullable=False, default=0, server_default="0")
+
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
+
+    __table_args__ = (Index("ix_documents_user_created", "user_id", "created_at"),)
+
+    def __repr__(self):
+        return f"<Document(id={self.id}, title={self.title})>"
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    # For SQLite compat store as JSON text; for PG with pgvector use Vector(1536)
+    # We store as TEXT containing JSON array; vector search done in Python fallback
+    embedding = Column(Text, nullable=True)
+    token_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    document = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        Index("ix_chunks_document_index", "document_id", "chunk_index"),
+        Index("ix_chunks_document_id", "document_id"),
+    )
+
+    def __repr__(self):
+        return f"<DocumentChunk(id={self.id}, doc={self.document_id}, idx={self.chunk_index})>"
