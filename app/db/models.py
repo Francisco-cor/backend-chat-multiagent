@@ -60,6 +60,7 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(255), nullable=True)
     model = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -107,6 +108,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     source = Column(String, nullable=True)  # filename or url
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -204,8 +206,52 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String, nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     def __repr__(self):
         return f"<AuditLog(id={self.id}, action={self.action})>"
+
+
+# ── Fase 11.4: Tenant isolation ──
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # For RLS comment: in PG we would do CREATE POLICY ... USING (org_id = current_setting('app.current_org')::int)
+    # Here we enforce at app layer via get_current_org + query filters
+
+    owner = relationship("User", foreign_keys=[owner_id])
+    memberships = relationship("Membership", back_populates="organization", cascade="all, delete-orphan", lazy="selectin")
+
+    def __repr__(self):
+        return f"<Organization(id={self.id}, name={self.name})>"
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), default="member", nullable=False, server_default="member")  # owner | admin | member
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Invite token for pending invites
+    invite_token = Column(String(64), nullable=True, index=True)
+    invited_email = Column(String, nullable=True)
+
+    organization = relationship("Organization", back_populates="memberships")
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_membership_org_user", "org_id", "user_id", unique=True),
+        Index("ix_membership_invite", "invite_token"),
+    )
+
+    def __repr__(self):
+        return f"<Membership(org={self.org_id}, user={self.user_id}, role={self.role})>"

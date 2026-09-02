@@ -133,6 +133,7 @@ async def handle_chat_json(
     request_data: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
+    org = Depends(deps.get_current_org),
 ):
     """
     Main endpoint for chat via JSON.
@@ -216,6 +217,7 @@ async def handle_chat_with_upload(
     response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
+    org = Depends(deps.get_current_org),
     session_id: str = Form(...),
     prompt: str = Form(...),
     model: str | None = Form(None),
@@ -310,6 +312,7 @@ async def handle_chat_stream(
     request_data: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
+    org = Depends(deps.get_current_org),
 ):
     """
     Streaming chat via Server-Sent Events (text/event-stream) — resilient.
@@ -442,6 +445,7 @@ async def handle_orchestrate(
     request_data: OrchestrateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
+    org = Depends(deps.get_current_org),
 ):
     _check_chat_write_scope(request)
     await _enforce_redis_rate(request, current_user)
@@ -493,6 +497,7 @@ async def handle_orchestrate_stream(
     request_data: OrchestrateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
+    org = Depends(deps.get_current_org),
 ):
     _check_chat_write_scope(request)
     await _enforce_redis_rate(request, current_user)

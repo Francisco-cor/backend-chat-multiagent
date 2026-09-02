@@ -27,6 +27,27 @@ logger = logging.getLogger(__name__)
 # Exceptions that must not be retried
 _NO_RETRY = (RateLimitError, anthropic.RateLimitError, asyncio.TimeoutError)
 
+# LLM cache helpers (Fase 11.2)
+def _history_hash(history) -> str:
+    try:
+        from app.services.cache_service import history_hash as hh
+        return hh(history)
+    except Exception:
+        return ""
+
+def _tools_hash(tools) -> str:
+    try:
+        import hashlib, json
+        if not tools:
+            return ""
+        names = []
+        for t in tools:
+            n = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else str(t))
+            names.append(n)
+        return hashlib.sha256("|".join(sorted(names)).encode()).hexdigest()[:16]
+    except Exception:
+        return ""
+
 
 def _retry_policy():
     return retry(
@@ -117,6 +138,18 @@ class GoogleGeminiProvider(LLMProvider):
         tools: Optional[List[Any]] = None,
         tool_context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # LLM cache check (skip if multimodal/tools/search to avoid stale)
+        hh = _history_hash(history)
+        th = _tools_hash(tools)
+        if not image_data and not file_data and not use_search and not tools:
+            try:
+                from app.services.cache_service import cache_service
+                cached = await cache_service.get_llm(prompt, self.model_name, hh, th)
+                if cached is not None:
+                    logger.info(f"LLM cache hit gemini {self.model_name}")
+                    return cached
+            except Exception:
+                pass
         # 1. Tool Configuration (Grounding 2025 + function calling)
         tools_config = []
         if use_search:
@@ -222,14 +255,26 @@ class GoogleGeminiProvider(LLMProvider):
                             txt = None
                     except Exception:
                         txt = None
+                final_text: str | None = None
                 if txt:
                     try:
-                        return txt.strip() if isinstance(txt, str) else str(txt).strip()
+                        candidate = txt.strip() if isinstance(txt, str) else str(txt).strip()
+                        if candidate:
+                            final_text = candidate
                     except Exception:
                         pass
-                    if isinstance(txt, str) and txt.strip():
-                        return txt.strip()
-                return "Processed information, but no verbal text was generated."
+                    if final_text is None and isinstance(txt, str) and txt.strip():
+                        final_text = txt.strip()
+                if final_text is None:
+                    final_text = "Processed information, but no verbal text was generated."
+                # cache set (only for simple text, no multimodal/tools/search)
+                if not image_data and not file_data and not use_search and not tools:
+                    try:
+                        from app.services.cache_service import cache_service as _cs
+                        await _cs.set_llm(prompt, self.model_name, final_text, hh, th)
+                    except Exception:
+                        pass
+                return final_text
 
             # Execute each function call and append to contents for next iteration
             for fc in function_calls:
@@ -336,6 +381,19 @@ class OpenAIProvider(LLMProvider):
         if not self.client:
             raise RuntimeError("OpenAI Client not initialized.")
 
+        # LLM cache (simple text only)
+        hh = _history_hash(history)
+        th = _tools_hash(tools)
+        if not image_data and not file_data and not use_search and not tools:
+            try:
+                from app.services.cache_service import cache_service
+                cached = await cache_service.get_llm(prompt, self.model_name, hh, th)
+                if cached is not None:
+                    logger.info(f"LLM cache hit openai {self.model_name}")
+                    return cached
+            except Exception:
+                pass
+
         messages = self._format_history(history)
 
         user_content = [{"type": "input_text", "text": prompt}]
@@ -384,7 +442,14 @@ class OpenAIProvider(LLMProvider):
                         elif isinstance(item, dict) and item.get("type") in ("function_call", "tool_call"):
                             tool_calls.append(item)
                 if not tool_calls:
-                    return resp.output_text or ""
+                    final = resp.output_text or ""
+                    if not image_data and not file_data and not use_search and not tools:
+                        try:
+                            from app.services.cache_service import cache_service as _cs2
+                            await _cs2.set_llm(prompt, self.model_name, final, hh, th)
+                        except Exception:
+                            pass
+                    return final
                 # Execute tools
                 for tc in tool_calls:
                     if isinstance(tc, dict):
@@ -483,6 +548,18 @@ class ClaudeProvider(LLMProvider):
         tools: Optional[List[Any]] = None,
         tool_context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        # LLM cache
+        hh = _history_hash(history)
+        th = _tools_hash(tools)
+        if not image_data and not file_data and not tools and not use_search:
+            try:
+                from app.services.cache_service import cache_service
+                cached = await cache_service.get_llm(prompt, self.model_name, hh, th)
+                if cached is not None:
+                    logger.info(f"LLM cache hit claude {self.model_name}")
+                    return cached
+            except Exception:
+                pass
         messages = self._format_history(history)
 
         user_content: List[Dict[str, Any]] = []
@@ -532,7 +609,14 @@ class ClaudeProvider(LLMProvider):
                 if not tool_uses:
                     tool_uses = [c for c in response.content if isinstance(c, dict) and c.get("type") == "tool_use"]
                 if not tool_uses:
-                    return response.content[0].text if response.content else ""
+                    final = response.content[0].text if response.content else ""
+                    if not image_data and not file_data and not tools and not use_search:
+                        try:
+                            from app.services.cache_service import cache_service as _cs3
+                            await _cs3.set_llm(prompt, self.model_name, final, hh, th)
+                        except Exception:
+                            pass
+                    return final
                 tool_results = []
                 for tu in tool_uses:
                     if isinstance(tu, dict):

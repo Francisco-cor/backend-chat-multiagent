@@ -54,6 +54,25 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
 
 
+@pytest.fixture(autouse=True)
+async def clear_caches():
+    # Clear LLM/embedding caches and redis fallback between tests
+    try:
+        from app.services.cache_service import cache_service
+        cache_service._mem.clear()
+        cache_service._mem_embedding.clear()
+        # also clear redis sliding window fallback
+        from app.core.rate_limit import redis_sliding_window
+        redis_sliding_window._fallback_store.clear()
+        # clear stream buffers
+        from app.services.stream_manager import _buffers, _counters
+        _buffers.clear()
+        _counters.clear()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db():

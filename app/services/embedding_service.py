@@ -37,19 +37,37 @@ class EmbeddingService:
         self.dim = getattr(settings, "EMBEDDING_DIM", 64)
 
     async def embed_text(self, text: str) -> List[float]:
+        # Cache check (Fase 11.2)
+        try:
+            from app.services.cache_service import cache_service
+            cached = await cache_service.get_embedding(text, self.provider, self.model)
+            if cached is not None:
+                logger.info(f"Embedding cache hit provider={self.provider} len={len(text)}")
+                return cached
+        except Exception:
+            pass
         # Try real providers, fallback to dummy
+        vec: List[float] | None = None
         if self.provider == "openai" and settings.OPENAI_API_KEY:
             try:
-                return await self._embed_openai(text)
+                vec = await self._embed_openai(text)
             except Exception as e:
                 logger.warning(f"OpenAI embed failed, fallback dummy: {e}")
-        if self.provider == "gemini" and settings.GOOGLE_API_KEY:
+        if vec is None and self.provider == "gemini" and settings.GOOGLE_API_KEY:
             try:
-                return await self._embed_gemini(text)
+                vec = await self._embed_gemini(text)
             except Exception as e:
                 logger.warning(f"Gemini embed failed, fallback dummy: {e}")
-        # Dummy
-        return await asyncio.to_thread(_dummy_vector, text, self.dim)
+        if vec is None:
+            # Dummy
+            vec = await asyncio.to_thread(_dummy_vector, text, self.dim)
+        # Store in cache
+        try:
+            from app.services.cache_service import cache_service as cs
+            await cs.set_embedding(text, self.provider, self.model, vec)  # type: ignore
+        except Exception:
+            pass
+        return vec
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         # Batch with concurrency limit

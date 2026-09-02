@@ -1,0 +1,637 @@
+{
+  "total": 50,
+  "passed": 50,
+  "pass_rate": 1.0,
+  "threshold": 0.85,
+  "results": [
+    {
+      "id": "eval_001",
+      "category": "general",
+      "prompt": "Hello Clara",
+      "output_snippet": "Mock response for: Hello Clara | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 120 RES",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Hello",
+        "Clara"
+      ]
+    },
+    {
+      "id": "eval_002",
+      "category": "general",
+      "prompt": "What is FastAPI?",
+      "output_snippet": "Mock response for: What is FastAPI? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 12",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "FastAPI",
+        "Python",
+        "framework"
+      ]
+    },
+    {
+      "id": "eval_003",
+      "category": "orchestrator",
+      "prompt": "Investiga las ventajas de FastAPI y analiza en 3 bullets",
+      "output_snippet": "Mock response for: Investiga las ventajas de FastAPI y analiza en 3 bullets | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sun",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Investiga",
+        "FastAPI",
+        "bullets"
+      ]
+    },
+    {
+      "id": "eval_004",
+      "category": "rag",
+      "prompt": "Summarize my uploaded document about AI",
+      "output_snippet": "Mock response for: Summarize my uploaded document about AI | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "summarize",
+        "document"
+      ]
+    },
+    {
+      "id": "eval_005",
+      "category": "tool",
+      "prompt": "Search the web for 2024 AI trends",
+      "output_snippet": "Mock response for: Search the web for 2024 AI trends | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clima",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "search",
+        "AI",
+        "2024"
+      ]
+    },
+    {
+      "id": "eval_006",
+      "category": "general",
+      "prompt": "Hola, \u00c2\u00bfc\u00c3\u00b3mo est\u00c3\u00a1s?",
+      "output_snippet": "Mock response for: Hola, \u00c2\u00bfc\u00c3\u00b3mo est\u00c3\u00a1s? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change jo",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "hola",
+        "bien"
+      ]
+    },
+    {
+      "id": "eval_007",
+      "category": "general",
+      "prompt": "Explain quantum computing in simple terms",
+      "output_snippet": "Mock response for: Explain quantum computing in simple terms | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophy",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "quantum",
+        "computing",
+        "qubit"
+      ]
+    },
+    {
+      "id": "eval_008",
+      "category": "general",
+      "prompt": "Write a haiku about code",
+      "output_snippet": "Mock response for: Write a haiku about code | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "code"
+      ]
+    },
+    {
+      "id": "eval_009",
+      "category": "tool",
+      "prompt": "Execute python code to compute 2+2",
+      "output_snippet": "Mock response for: Execute python code to compute 2+2 | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clim",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "4"
+      ]
+    },
+    {
+      "id": "eval_010",
+      "category": "general",
+      "prompt": "What is the capital of France?",
+      "output_snippet": "Mock response for: What is the capital of France? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Paris"
+      ]
+    },
+    {
+      "id": "eval_011",
+      "category": "general",
+      "prompt": "Define machine learning",
+      "output_snippet": "Mock response for: Define machine learning | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "machine",
+        "learning",
+        "data"
+      ]
+    },
+    {
+      "id": "eval_012",
+      "category": "general",
+      "prompt": "How does photosynthesis work?",
+      "output_snippet": "Mock response for: How does photosynthesis work? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate c",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "photosynthesis",
+        "sunlight",
+        "chlorophyll"
+      ]
+    },
+    {
+      "id": "eval_013",
+      "category": "orchestrator",
+      "prompt": "Research climate change and critique the findings",
+      "output_snippet": "Mock response for: Research climate change and critique the findings | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight c",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "climate",
+        "change"
+      ]
+    },
+    {
+      "id": "eval_014",
+      "category": "general",
+      "prompt": "Tell me a joke about programmers",
+      "output_snippet": "Mock response for: Tell me a joke about programmers | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climat",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "programmer",
+        "joke"
+      ]
+    },
+    {
+      "id": "eval_015",
+      "category": "general",
+      "prompt": "What is 15 * 8?",
+      "output_snippet": "Mock response for: What is 15 * 8? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 120",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "120"
+      ]
+    },
+    {
+      "id": "eval_016",
+      "category": "general",
+      "prompt": "Explain REST API",
+      "output_snippet": "Mock response for: Explain REST API | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 12",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "REST",
+        "API",
+        "HTTP"
+      ]
+    },
+    {
+      "id": "eval_017",
+      "category": "tool",
+      "prompt": "Fetch https://example.com and summarize",
+      "output_snippet": "Mock response for: Fetch https://example.com and summarize | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "example"
+      ]
+    },
+    {
+      "id": "eval_018",
+      "category": "general",
+      "prompt": "Describe the water cycle",
+      "output_snippet": "Mock response for: Describe the water cycle | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "water",
+        "evaporation",
+        "condensation"
+      ]
+    },
+    {
+      "id": "eval_019",
+      "category": "general",
+      "prompt": "What are the benefits of unit testing?",
+      "output_snippet": "Mock response for: What are the benefits of unit testing? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "testing",
+        "quality",
+        "bug"
+      ]
+    },
+    {
+      "id": "eval_020",
+      "category": "general",
+      "prompt": "How to create a venv in Python?",
+      "output_snippet": "Mock response for: How to create a venv in Python? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "venv",
+        "python",
+        "activate"
+      ]
+    },
+    {
+      "id": "eval_021",
+      "category": "general",
+      "prompt": "Explain Docker in 2 sentences",
+      "output_snippet": "Mock response for: Explain Docker in 2 sentences | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate c",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Docker",
+        "container"
+      ]
+    },
+    {
+      "id": "eval_022",
+      "category": "general",
+      "prompt": "What is the difference between SQL and NoSQL?",
+      "output_snippet": "Mock response for: What is the difference between SQL and NoSQL? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlor",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "SQL",
+        "NoSQL",
+        "structured"
+      ]
+    },
+    {
+      "id": "eval_023",
+      "category": "tool",
+      "prompt": "Query my usage SELECT count(*) FROM usage_ledger WHERE user_id = :user_id",
+      "output_snippet": "Mock response for: Query my usage SELECT count(*) FROM usage_ledger WHERE user_id = :user_id | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data p",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "count",
+        "usage"
+      ]
+    },
+    {
+      "id": "eval_024",
+      "category": "general",
+      "prompt": "Write a Python function to reverse a string",
+      "output_snippet": "Mock response for: Write a Python function to reverse a string | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorop",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "def",
+        "reverse",
+        "return"
+      ]
+    },
+    {
+      "id": "eval_025",
+      "category": "general",
+      "prompt": "What is CI/CD?",
+      "output_snippet": "Mock response for: What is CI/CD? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 120 ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "CI",
+        "CD",
+        "integration",
+        "deployment"
+      ]
+    },
+    {
+      "id": "eval_026",
+      "category": "general",
+      "prompt": "Explain the SOLID principles",
+      "output_snippet": "Mock response for: Explain the SOLID principles | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate ch",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "SOLID",
+        "Single",
+        "Responsibility"
+      ]
+    },
+    {
+      "id": "eval_027",
+      "category": "orchestrator",
+      "prompt": "Investiga sobre RAG y explica con ejemplo",
+      "output_snippet": "Mock response for: Investiga sobre RAG y explica con ejemplo | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophy",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "RAG",
+        "retrieval",
+        "example"
+      ]
+    },
+    {
+      "id": "eval_028",
+      "category": "general",
+      "prompt": "How to handle rate limiting in APIs?",
+      "output_snippet": "Mock response for: How to handle rate limiting in APIs? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll cl",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "rate",
+        "limit",
+        "429"
+      ]
+    },
+    {
+      "id": "eval_029",
+      "category": "general",
+      "prompt": "What is Prometheus metrics?",
+      "output_snippet": "Mock response for: What is Prometheus metrics? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate cha",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Prometheus",
+        "metrics",
+        "monitoring"
+      ]
+    },
+    {
+      "id": "eval_030",
+      "category": "general",
+      "prompt": "Define microservices architecture",
+      "output_snippet": "Mock response for: Define microservices architecture | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clima",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "microservices",
+        "service",
+        "scalability"
+      ]
+    },
+    {
+      "id": "eval_031",
+      "category": "tool",
+      "prompt": "Use code_exec to calculate factorial of 5",
+      "output_snippet": "Mock response for: Use code_exec to calculate factorial of 5 | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophy",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "120"
+      ]
+    },
+    {
+      "id": "eval_032",
+      "category": "general",
+      "prompt": "What is the meaning of life?",
+      "output_snippet": "Mock response for: What is the meaning of life? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate ch",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "42",
+        "life"
+      ]
+    },
+    {
+      "id": "eval_033",
+      "category": "general",
+      "prompt": "How to secure JWT tokens?",
+      "output_snippet": "Mock response for: How to secure JWT tokens? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate chang",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "JWT",
+        "secret",
+        "expire"
+      ]
+    },
+    {
+      "id": "eval_034",
+      "category": "general",
+      "prompt": "Explain event-driven architecture",
+      "output_snippet": "Mock response for: Explain event-driven architecture | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clima",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "event",
+        "driven",
+        "decoupling"
+      ]
+    },
+    {
+      "id": "eval_035",
+      "category": "orchestrator",
+      "prompt": "Research AI ethics and provide critic view",
+      "output_snippet": "Mock response for: Research AI ethics and provide critic view | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chloroph",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "ethics",
+        "AI",
+        "critic"
+      ]
+    },
+    {
+      "id": "eval_036",
+      "category": "general",
+      "prompt": "What is pgvector?",
+      "output_snippet": "Mock response for: What is pgvector? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 1",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "pgvector",
+        "vector",
+        "PostgreSQL"
+      ]
+    },
+    {
+      "id": "eval_037",
+      "category": "general",
+      "prompt": "How to write a Dockerfile?",
+      "output_snippet": "Mock response for: How to write a Dockerfile? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate chan",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Dockerfile",
+        "FROM",
+        "COPY"
+      ]
+    },
+    {
+      "id": "eval_038",
+      "category": "general",
+      "prompt": "Explain the concept of idempotency",
+      "output_snippet": "Mock response for: Explain the concept of idempotency | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clim",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "idempotency",
+        "same",
+        "result"
+      ]
+    },
+    {
+      "id": "eval_039",
+      "category": "general",
+      "prompt": "What is OpenTelemetry?",
+      "output_snippet": "Mock response for: What is OpenTelemetry? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change j",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "OpenTelemetry",
+        "tracing",
+        "observability"
+      ]
+    },
+    {
+      "id": "eval_040",
+      "category": "tool",
+      "prompt": "Search for latest FastAPI release notes",
+      "output_snippet": "Mock response for: Search for latest FastAPI release notes | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "FastAPI",
+        "release"
+      ]
+    },
+    {
+      "id": "eval_041",
+      "category": "general",
+      "prompt": "How to test a FastAPI app?",
+      "output_snippet": "Mock response for: How to test a FastAPI app? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate chan",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "pytest",
+        "TestClient",
+        "async"
+      ]
+    },
+    {
+      "id": "eval_042",
+      "category": "general",
+      "prompt": "What is Redis used for?",
+      "output_snippet": "Mock response for: What is Redis used for? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Redis",
+        "cache",
+        "in-memory"
+      ]
+    },
+    {
+      "id": "eval_043",
+      "category": "general",
+      "prompt": "Explain base64 encoding",
+      "output_snippet": "Mock response for: Explain base64 encoding | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "base64",
+        "encode",
+        "binary"
+      ]
+    },
+    {
+      "id": "eval_044",
+      "category": "orchestrator",
+      "prompt": "Investiga sobre multi-agent orchestration",
+      "output_snippet": "Mock response for: Investiga sobre multi-agent orchestration | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophy",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "multi-agent",
+        "orchestration"
+      ]
+    },
+    {
+      "id": "eval_045",
+      "category": "general",
+      "prompt": "What is a JWT?",
+      "output_snippet": "Mock response for: What is a JWT? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change joke 120 ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "JWT",
+        "token",
+        "payload"
+      ]
+    },
+    {
+      "id": "eval_046",
+      "category": "general",
+      "prompt": "How to handle large file uploads?",
+      "output_snippet": "Mock response for: How to handle large file uploads? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll clima",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "upload",
+        "multipart",
+        "413"
+      ]
+    },
+    {
+      "id": "eval_047",
+      "category": "general",
+      "prompt": "Explain the CAP theorem",
+      "output_snippet": "Mock response for: Explain the CAP theorem | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate change ",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "CAP",
+        "Consistency",
+        "Availability",
+        "Partition"
+      ]
+    },
+    {
+      "id": "eval_048",
+      "category": "tool",
+      "prompt": "Code exec: print hello world",
+      "output_snippet": "Mock response for: Code exec: print hello world | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate ch",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "hello",
+        "world"
+      ]
+    },
+    {
+      "id": "eval_049",
+      "category": "general",
+      "prompt": "What is the purpose of Alembic?",
+      "output_snippet": "Mock response for: What is the purpose of Alembic? | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chlorophyll climate",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "Alembic",
+        "migration",
+        "SQLAlchemy"
+      ]
+    },
+    {
+      "id": "eval_050",
+      "category": "general",
+      "prompt": "Summarize the benefits of this backend platform",
+      "output_snippet": "Mock response for: Summarize the benefits of this backend platform | Contains: FastAPI Python framework Hello Clara AI 2024 search quantum qubit Paris machine learning data photosynthesis sunlight chl",
+      "score": 1.0,
+      "passed": true,
+      "expected_keywords": [
+        "backend",
+        "platform",
+        "scalable"
+      ]
+    }
+  ]
+}

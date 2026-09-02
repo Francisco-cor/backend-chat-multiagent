@@ -100,6 +100,21 @@ class Settings(BaseSettings):
     CHAT_RATE_LIMIT: str = "5/minute"
     API_KEY_RATE_LIMIT: str = "60/minute"
 
+    # Tracing (Fase 11.1)
+    OTEL_ENABLED: bool = False
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://otel-collector:4317"
+    OTEL_SERVICE_NAME: str = "backend-chat-multiagent"
+
+    # Cache (Fase 11.2)
+    CACHE_ENABLED: bool = True
+    CACHE_TTL_SECONDS: int = 3600
+    CACHE_EMBEDDING_TTL: int = 86400
+    LLM_CACHE_TTL: int = 600
+
+    # Retention / GDPR (Fase 11.5)
+    RETENTION_DAYS: int = 365
+    GDPR_RETENTION_DAYS: int = 30
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini

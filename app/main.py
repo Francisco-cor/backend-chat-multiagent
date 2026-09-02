@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.metrics import setup_metrics
 from app.core.errors import setup_problem_handlers
+from app.core.tracing import setup_tracing
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from google import genai
@@ -145,6 +146,8 @@ app = FastAPI(
         {"name": "api-keys", "description": "API key lifecycle (hash + scopes + expiry). Scopes: chat:write/read, etc."},
         {"name": "billing", "description": "Usage ledger + cost aggregation + Stripe webhook stub."},
         {"name": "admin", "description": "Superuser only (list users, quotas, ban, plan)."},
+        {"name": "organizations", "description": "Tenant orgs (create/list/invite/accept) + membership RLS."},
+        {"name": "compliance", "description": "GDPR export/delete + audit log (Retention 365d)."},
         {"name": "ws", "description": "WebSocket `/ws/chat?token=<jwt>` ping/pong, ack, delta streaming."},
         {"name": "Health", "description": "Liveness `/health/live` (process) vs readiness `/health/ready` (DB+Redis)."},
         {"name": "Metrics", "description": "Prometheus `/metrics`."},
@@ -158,6 +161,12 @@ app.state.limiter = limiter
 # Keep fallback then override with ProblemDetails
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 setup_problem_handlers(app)
+
+# Tracing setup (no-op if OTEL_ENABLED false or packages missing)
+try:
+    setup_tracing(app)
+except Exception as _e:
+    logger.warning(f"Tracing setup failed: {_e}")
 
 # --- OpenAPI security schemes (JWT + API-Key) ---
 def custom_openapi():

@@ -1,0 +1,50 @@
+{"id":"eval_001","category":"general","prompt":"Hello Clara","expected_keywords":["Hello","Clara"],"model":"gemini-3.1-pro"}
+{"id":"eval_002","category":"general","prompt":"What is FastAPI?","expected_keywords":["FastAPI","Python","framework"],"model":"gemini-3.1-pro"}
+{"id":"eval_003","category":"orchestrator","prompt":"Investiga las ventajas de FastAPI y analiza en 3 bullets","expected_keywords":["Investiga","FastAPI","bullets"],"model":"gemini-3.1-pro","strategy":"auto"}
+{"id":"eval_004","category":"rag","prompt":"Summarize my uploaded document about AI","expected_keywords":["summarize","document"],"model":"gemini-3.1-pro"}
+{"id":"eval_005","category":"tool","prompt":"Search the web for 2024 AI trends","expected_keywords":["search","AI","2024"],"model":"gpt-5.4-mini"}
+{"id":"eval_006","category":"general","prompt":"Hola, ¿cómo estás?","expected_keywords":["hola","bien"],"model":"gemini-3-flash"}
+{"id":"eval_007","category":"general","prompt":"Explain quantum computing in simple terms","expected_keywords":["quantum","computing","qubit"],"model":"claude-sonnet-4-6"}
+{"id":"eval_008","category":"general","prompt":"Write a haiku about code","expected_keywords":["code"],"model":"claude-haiku-4-5"}
+{"id":"eval_009","category":"tool","prompt":"Execute python code to compute 2+2","expected_keywords":["4"],"model":"gpt-5.4-mini"}
+{"id":"eval_010","category":"general","prompt":"What is the capital of France?","expected_keywords":["Paris"],"model":"gemini-3.1-pro"}
+{"id":"eval_011","category":"general","prompt":"Define machine learning","expected_keywords":["machine","learning","data"],"model":"gemini-3.1-pro"}
+{"id":"eval_012","category":"general","prompt":"How does photosynthesis work?","expected_keywords":["photosynthesis","sunlight","chlorophyll"],"model":"gemini-3-flash"}
+{"id":"eval_013","category":"orchestrator","prompt":"Research climate change and critique the findings","expected_keywords":["climate","change"],"model":"gemini-3.1-pro","strategy":"parallel"}
+{"id":"eval_014","category":"general","prompt":"Tell me a joke about programmers","expected_keywords":["programmer","joke"],"model":"gpt-5.4-mini"}
+{"id":"eval_015","category":"general","prompt":"What is 15 * 8?","expected_keywords":["120"],"model":"gpt-5.4-mini"}
+{"id":"eval_016","category":"general","prompt":"Explain REST API","expected_keywords":["REST","API","HTTP"],"model":"claude-sonnet-4-6"}
+{"id":"eval_017","category":"tool","prompt":"Fetch https://example.com and summarize","expected_keywords":["example"],"model":"gpt-5.4-mini"}
+{"id":"eval_018","category":"general","prompt":"Describe the water cycle","expected_keywords":["water","evaporation","condensation"],"model":"gemini-3.1-pro"}
+{"id":"eval_019","category":"general","prompt":"What are the benefits of unit testing?","expected_keywords":["testing","quality","bug"],"model":"gemini-3-flash"}
+{"id":"eval_020","category":"general","prompt":"How to create a venv in Python?","expected_keywords":["venv","python","activate"],"model":"gpt-5.4-mini"}
+{"id":"eval_021","category":"general","prompt":"Explain Docker in 2 sentences","expected_keywords":["Docker","container"],"model":"claude-haiku-4-5"}
+{"id":"eval_022","category":"general","prompt":"What is the difference between SQL and NoSQL?","expected_keywords":["SQL","NoSQL","structured"],"model":"gemini-3.1-pro"}
+{"id":"eval_023","category":"tool","prompt":"Query my usage SELECT count(*) FROM usage_ledger WHERE user_id = :user_id","expected_keywords":["count","usage"],"model":"gpt-5.4-mini"}
+{"id":"eval_024","category":"general","prompt":"Write a Python function to reverse a string","expected_keywords":["def","reverse","return"],"model":"claude-sonnet-4-6"}
+{"id":"eval_025","category":"general","prompt":"What is CI/CD?","expected_keywords":["CI","CD","integration","deployment"],"model":"gemini-3.1-pro"}
+{"id":"eval_026","category":"general","prompt":"Explain the SOLID principles","expected_keywords":["SOLID","Single","Responsibility"],"model":"gemini-3-flash"}
+{"id":"eval_027","category":"orchestrator","prompt":"Investiga sobre RAG y explica con ejemplo","expected_keywords":["RAG","retrieval","example"],"model":"gemini-3.1-pro"}
+{"id":"eval_028","category":"general","prompt":"How to handle rate limiting in APIs?","expected_keywords":["rate","limit","429"],"model":"gpt-5.4-mini"}
+{"id":"eval_029","category":"general","prompt":"What is Prometheus metrics?","expected_keywords":["Prometheus","metrics","monitoring"],"model":"claude-sonnet-4-6"}
+{"id":"eval_030","category":"general","prompt":"Define microservices architecture","expected_keywords":["microservices","service","scalability"],"model":"gemini-3.1-pro"}
+{"id":"eval_031","category":"tool","prompt":"Use code_exec to calculate factorial of 5","expected_keywords":["120"],"model":"gpt-5.4-mini"}
+{"id":"eval_032","category":"general","prompt":"What is the meaning of life?","expected_keywords":["42","life"],"model":"claude-haiku-4-5"}
+{"id":"eval_033","category":"general","prompt":"How to secure JWT tokens?","expected_keywords":["JWT","secret","expire"],"model":"gemini-3.1-pro"}
+{"id":"eval_034","category":"general","prompt":"Explain event-driven architecture","expected_keywords":["event","driven","decoupling"],"model":"gemini-3-flash"}
+{"id":"eval_035","category":"orchestrator","prompt":"Research AI ethics and provide critic view","expected_keywords":["ethics","AI","critic"],"model":"gemini-3.1-pro"}
+{"id":"eval_036","category":"general","prompt":"What is pgvector?","expected_keywords":["pgvector","vector","PostgreSQL"],"model":"gpt-5.4-mini"}
+{"id":"eval_037","category":"general","prompt":"How to write a Dockerfile?","expected_keywords":["Dockerfile","FROM","COPY"],"model":"claude-sonnet-4-6"}
+{"id":"eval_038","category":"general","prompt":"Explain the concept of idempotency","expected_keywords":["idempotency","same","result"],"model":"gemini-3.1-pro"}
+{"id":"eval_039","category":"general","prompt":"What is OpenTelemetry?","expected_keywords":["OpenTelemetry","tracing","observability"],"model":"gemini-3-flash"}
+{"id":"eval_040","category":"tool","prompt":"Search for latest FastAPI release notes","expected_keywords":["FastAPI","release"],"model":"gpt-5.4-mini"}
+{"id":"eval_041","category":"general","prompt":"How to test a FastAPI app?","expected_keywords":["pytest","TestClient","async"],"model":"claude-sonnet-4-6"}
+{"id":"eval_042","category":"general","prompt":"What is Redis used for?","expected_keywords":["Redis","cache","in-memory"],"model":"gemini-3.1-pro"}
+{"id":"eval_043","category":"general","prompt":"Explain base64 encoding","expected_keywords":["base64","encode","binary"],"model":"gemini-3-flash"}
+{"id":"eval_044","category":"orchestrator","prompt":"Investiga sobre multi-agent orchestration","expected_keywords":["multi-agent","orchestration"],"model":"gemini-3.1-pro"}
+{"id":"eval_045","category":"general","prompt":"What is a JWT?","expected_keywords":["JWT","token","payload"],"model":"gpt-5.4-mini"}
+{"id":"eval_046","category":"general","prompt":"How to handle large file uploads?","expected_keywords":["upload","multipart","413"],"model":"claude-haiku-4-5"}
+{"id":"eval_047","category":"general","prompt":"Explain the CAP theorem","expected_keywords":["CAP","Consistency","Availability","Partition"],"model":"gemini-3.1-pro"}
+{"id":"eval_048","category":"tool","prompt":"Code exec: print hello world","expected_keywords":["hello","world"],"model":"gpt-5.4-mini"}
+{"id":"eval_049","category":"general","prompt":"What is the purpose of Alembic?","expected_keywords":["Alembic","migration","SQLAlchemy"],"model":"gemini-3-flash"}
+{"id":"eval_050","category":"general","prompt":"Summarize the benefits of this backend platform","expected_keywords":["backend","platform","scalable"],"model":"gemini-3.1-pro"}

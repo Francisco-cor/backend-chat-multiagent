@@ -241,3 +241,54 @@ async def get_current_superuser(
     if not getattr(user, "is_superuser", False):
         raise HTTPException(status_code=403, detail="Superuser required")
     return user
+
+
+# ── Tenant (Fase 11.4) ──
+
+async def get_current_org(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Resolve X-Org-Id header to Organization if provided; validates membership.
+    Returns Optional[Organization] (None = personal scope).
+    """
+    org_id_raw = request.headers.get("x-org-id") or request.headers.get("X-Org-Id") or request.query_params.get("org_id")
+    if not org_id_raw:
+        return None
+    try:
+        org_id = int(org_id_raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid X-Org-Id")
+    from app.db.models import Organization, Membership
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalars().first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    # check membership
+    mem = await db.execute(select(Membership).where(Membership.org_id == org_id, Membership.user_id == current_user.id))
+    if not mem.scalars().first() and org.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not a member of organization")
+    # stash for RLS comment
+    try:
+        request.state.org_id = org_id
+    except Exception:
+        pass
+    return org
+
+
+async def require_org_member(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Helper for org-scoped endpoints with path org_id."""
+    from app.db.models import Organization, Membership
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalars().first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    mem = await db.execute(select(Membership).where(Membership.org_id == org_id, Membership.user_id == current_user.id))
+    if not mem.scalars().first() and org.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not a member")
+    return org
