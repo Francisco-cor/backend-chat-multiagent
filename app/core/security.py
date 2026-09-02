@@ -6,10 +6,13 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 # Security configuration for password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Dual-scheme: new hashes use argon2, old bcrypt hashes remain verifiable.
+# This fixes the bcrypt 4.0.1 + passlib incompatibility and removes 72-byte limit.
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
+
 
 def create_access_token(
-    subject: Union[str, Any], expires_delta: timedelta = None
+    subject: Union[str, Any], expires_delta: timedelta | None = None
 ) -> str:
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -20,9 +23,16 @@ def create_access_token(
     to_encode = {"exp": expire, "sub": str(subject)}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
+
+def needs_rehash(hashed_password: str) -> bool:
+    """Check if hash needs migration to argon2."""
+    return pwd_context.needs_update(hashed_password)
+
+
 async def get_password_hash(password: str) -> str:
     # Use to_thread because hashing is CPU-intensive and synchronous
     return await asyncio.to_thread(pwd_context.hash, password)
+
 
 async def verify_password(plain_password: str, hashed_password: str) -> bool:
     # Also use to_thread for verification to avoid blocking the event loop
