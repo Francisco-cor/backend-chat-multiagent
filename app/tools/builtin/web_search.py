@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from app.tools.base import Tool
 
@@ -18,7 +18,7 @@ class WebSearchTool(Tool):
         "required": ["query"],
     }
 
-    async def execute(self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+    async def execute(self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
         self.validate(args)
         query = args["query"]
         num = args.get("num_results", 3)

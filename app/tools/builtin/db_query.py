@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Dict, Any
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ class DbQueryTool(Tool):
         "required": ["query"],
     }
 
-    async def execute(self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+    async def execute(self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
         self.validate(args)
         query = args["query"].strip()
         limit = args.get("limit", 10)
@@ -64,7 +64,7 @@ class DbQueryTool(Tool):
                 return "(no rows)"
             # Format rows
             cols = list(result.keys())
-            lines = [f" | ".join(cols)]
+            lines = [" | ".join(cols)]
             for row in rows[:limit]:
                 lines.append(" | ".join(str(v)[:100] for v in row))
             return "\n".join(lines)[:2000]

@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Any, List
+from typing import Any
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ class MCPClient:
         self.url = url
         self.transport = transport
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         # For sse transport, GET /tools
         try:
             async with httpx.AsyncClient(timeout=5) as client:
@@ -23,7 +24,7 @@ class MCPClient:
             logger.warning(f"MCP {self.name} list_tools failed: {e}")
             return []
 
-    async def call_tool(self, tool_name: str, args: Dict[str, Any]) -> str:
+    async def call_tool(self, tool_name: str, args: dict[str, Any]) -> str:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
@@ -35,7 +36,7 @@ class MCPClient:
         except Exception as e:
             return f"MCP {self.name} error calling {tool_name}: {e}"
 
-    def to_tool(self, tool_def: Dict[str, Any]):
+    def to_tool(self, tool_def: dict[str, Any]):
         # Convert MCP tool def to our Tool
         from app.tools.base import Tool
 
@@ -44,7 +45,7 @@ class MCPClient:
             description = tool_def.get("description", "")
             parameters = tool_def.get("inputSchema", {"type": "object", "properties": {}})
 
-            async def execute(inner_self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+            async def execute(inner_self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
                 return await self.call_tool(tool_def.get("name"), args)
 
         return MCPProxyTool()

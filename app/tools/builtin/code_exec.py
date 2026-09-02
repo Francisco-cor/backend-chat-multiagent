@@ -1,7 +1,6 @@
 import asyncio
 import logging
-import time
-from typing import Dict, Any
+from typing import Any
 
 from app.tools.base import Tool
 
@@ -20,7 +19,7 @@ class CodeExecTool(Tool):
         "required": ["code"],
     }
 
-    async def execute(self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+    async def execute(self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
         self.validate(args)
         code = args["code"]
         timeout = args.get("timeout", 5)
@@ -35,9 +34,8 @@ class CodeExecTool(Tool):
             return "Error: Potential infinite loop blocked"
 
         def _run():
-            import io
-            import sys
             import contextlib
+            import io
 
             # Restricted builtins
             allowed_builtins = {
@@ -74,7 +72,7 @@ class CodeExecTool(Tool):
             if len(result) > 2000:
                 result = result[:2000] + "...[truncated]"
             return result.strip() or "(executed with no output)"
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return "Error: Code execution timed out"
         except Exception as e:
             return f"Error: {e}"

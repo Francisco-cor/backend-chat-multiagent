@@ -49,11 +49,12 @@ class LLMAgent(Agent):
     async def run(
         self,
         prompt: str,
-        history: list[Any],
-        scratchpad: dict[str, Any],
-        context: dict[str, Any] | None = None,
+        history: List[Any],
+        scratchpad: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         from app.services.chat_service import ChatService
+        from app.tools.registry import tool_registry
 
         agent_context = f"[{self.name}] {self.config.system_prompt}\n"
         if scratchpad:
@@ -64,8 +65,18 @@ class LLMAgent(Agent):
         h = self.history_window(history)
 
         openai_client = context.get("openai_client") if context else None
-        # Lazy import to avoid circular
         provider = ChatService.get_provider(self.config.model, openai_client)
+
+        # Gather tools allowed for this agent
+        allowed_tools = tool_registry.get_allowed(self.config.tools) if self.config.tools else []
+        # Include global allowlist if configured
+        from app.core.config import settings as cfg
+
+        if cfg.TOOL_ALLOWLIST is not None:
+            allowed_tools = [t for t in allowed_tools if t.name in cfg.TOOL_ALLOWLIST]
+
+        # Filter to only pass if there are tools (or search)
+        tools_to_pass = allowed_tools if allowed_tools else None
 
         reply = await provider.generate(
             prompt=enriched_prompt,
@@ -73,6 +84,8 @@ class LLMAgent(Agent):
             image_data=context.get("image_data") if context else None,
             file_data=context.get("file_data") if context else None,
             use_search="search" in self.config.tools,
+            tools=tools_to_pass,
+            tool_context=context,
         )
         scratchpad[self.name] = reply
         return reply

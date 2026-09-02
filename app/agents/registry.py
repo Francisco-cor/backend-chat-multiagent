@@ -19,7 +19,7 @@ RESEARCHER_CONFIG = AgentConfig(
     model="gemini-3.1-pro",
     temperature=0.5,
     max_history=10,
-    tools=["search"],
+    tools=["web_search"],
 )
 
 ANALYST_CONFIG = AgentConfig(
@@ -29,7 +29,7 @@ ANALYST_CONFIG = AgentConfig(
     model="gpt-5.4-mini",
     temperature=0.5,
     max_history=10,
-    tools=[],
+    tools=["code_exec", "db_query", "fetch_url"],
 )
 
 CRITIC_CONFIG = AgentConfig(

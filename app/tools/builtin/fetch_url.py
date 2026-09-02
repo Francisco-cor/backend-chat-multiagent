@@ -1,6 +1,5 @@
 import logging
-import asyncio
-from typing import Dict, Any
+from typing import Any
 
 import httpx
 
@@ -21,7 +20,7 @@ class FetchUrlTool(Tool):
         "required": ["url"],
     }
 
-    async def execute(self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+    async def execute(self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
         self.validate(args)
         url = args["url"]
         max_len = args.get("max_length", 2000)

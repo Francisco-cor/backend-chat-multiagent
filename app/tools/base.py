@@ -1,7 +1,6 @@
-import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 import jsonschema
 
@@ -12,7 +11,7 @@ class Tool(ABC):
     name: str = ""
     description: str = ""
     # JSON Schema for arguments
-    parameters: Dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
 
     def __init__(self):
         if not self.name:
@@ -23,14 +22,14 @@ class Tool(ABC):
         if "type" not in self.parameters:
             self.parameters["type"] = "object"
 
-    def validate(self, args: Dict[str, Any]) -> None:
+    def validate(self, args: dict[str, Any]) -> None:
         jsonschema.validate(instance=args, schema=self.parameters)
 
     @abstractmethod
-    async def execute(self, args: Dict[str, Any], context: Dict[str, Any] | None = None) -> str:
+    async def execute(self, args: dict[str, Any], context: dict[str, Any] | None = None) -> str:
         pass
 
-    def to_openai_tool(self) -> Dict[str, Any]:
+    def to_openai_tool(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
@@ -40,14 +39,14 @@ class Tool(ABC):
             },
         }
 
-    def to_anthropic_tool(self) -> Dict[str, Any]:
+    def to_anthropic_tool(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
             "input_schema": self.parameters,
         }
 
-    def to_gemini_tool(self) -> Dict[str, Any]:
+    def to_gemini_tool(self) -> dict[str, Any]:
         # Gemini uses FunctionDeclaration
         return {
             "name": self.name,
