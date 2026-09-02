@@ -1,6 +1,6 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List, Set, Any
+from typing import List, Set, Any, Dict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 4
     RAG_CHUNK_SIZE: int = 512
     RAG_CHUNK_OVERLAP: int = 50
+
+    # Tools
+    TOOL_ALLOWLIST: List[str] | None = None  # None = all, else list of allowed tool names
+    MAX_TOOL_ITERATIONS: int = 5
+
+    # MCP
+    MCP_SERVERS: List[Dict[str, Any]] = []  # e.g. [{"name": "my_server", "url": "http://localhost:8001", "transport": "sse"}]
 
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [

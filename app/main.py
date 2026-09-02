@@ -68,6 +68,30 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Anthropic Error: {e}")
 
+    # 5) Load builtin tools
+    try:
+        from app.tools.registry import load_builtin_tools, tool_registry
+
+        load_builtin_tools()
+        logger.info(f"Tools loaded: {tool_registry.list_names()}")
+    except Exception as e:
+        logger.warning(f"Tool loading failed: {e}")
+
+    # 6) Load MCP servers (best-effort)
+    if settings.MCP_SERVERS:
+        try:
+            from app.mcp.registry import mcp_registry
+
+            for srv in settings.MCP_SERVERS:
+                mcp_registry.add_server(srv.get("name"), srv.get("url"), srv.get("transport", "sse"))
+            # Don't block startup on MCP
+            try:
+                await mcp_registry.load_tools()
+            except Exception as e:
+                logger.warning(f"MCP load failed: {e}")
+        except Exception as e:
+            logger.warning(f"MCP registry failed: {e}")
+
     yield  # app runs here
 
 
