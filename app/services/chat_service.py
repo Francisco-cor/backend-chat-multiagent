@@ -177,6 +177,8 @@ class ChatService:
                 "file_data": file_data,
                 "model_name": model_name,
                 "use_search": use_search,
+                "db": db,
+                "user_id": user_id,
             }
             reply, trace = await orchestrator.orchestrate(
                 prompt, history, context=context, strategy=strategy
@@ -350,6 +352,8 @@ class ChatService:
                 "file_data": file_data,
                 "model_name": model_name,
                 "use_search": use_search,
+                "db": db,
+                "user_id": user_id,
             }
             async for event in orchestrator.orchestrate_stream(
                 prompt, history, context=context, strategy=strategy

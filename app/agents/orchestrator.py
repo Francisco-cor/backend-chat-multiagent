@@ -135,6 +135,28 @@ class SupervisorOrchestrator:
         if not allowed:
             return sanitized
         prompt = sanitized
+
+        # RAG injection for researcher
+        if agent.name == "researcher":
+            try:
+                from app.services.retriever import Retriever
+
+                db = context.get("db")
+                user_id = context.get("user_id")
+                if db is not None and user_id is not None:
+                    rag_context, citations = await Retriever.search_with_citations(db, user_id, prompt)
+                    if rag_context:
+                        logger.info(f"RAG: found {len(citations)} chunks for researcher")
+                        prompt = (
+                            f"Context from your documents:\n{rag_context}\n\n"
+                            f"Question: {prompt}\n"
+                            "Answer using the context above and cite sources as [1], [2]..."
+                        )
+                        scratchpad["rag_citations"] = citations
+                        scratchpad["rag_context"] = rag_context
+            except Exception as e:
+                logger.warning(f"RAG retrieval failed for researcher: {e}")
+
         # History window per agent
         h = agent.history_window(history)
         return await agent.run(prompt, h, scratchpad, context)
