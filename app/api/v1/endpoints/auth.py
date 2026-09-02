@@ -6,14 +6,17 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from jose import jwt
+from pydantic import ValidationError
+
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.api import deps
-from app.db.models import User
+from app.db.models import RevokedToken, User
 from app.db.session import get_db
+from app.schemas.token import RefreshRequest, Token, TokenPayload
 from app.schemas.user import UserCreate, UserOut
-from app.schemas.token import Token
 
 router = APIRouter()
 
@@ -85,12 +88,107 @@ async def login_access_token(
             await db.rollback()
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(user.id, expires_delta=access_token_expires)
+    refresh_token = security.create_refresh_token(user.id)
     return {
-        "access_token": security.create_access_token(
-            user.id, expires_delta=access_token_expires
-        ),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     }
+
+
+@router.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")
+async def refresh_access_token(
+    request: Request,
+    *,
+    db: AsyncSession = Depends(get_db),
+    body: RefreshRequest,
+) -> Any:
+    """
+    Rotate refresh token and issue new access token.
+    Revokes the old refresh token (single-use).
+    """
+    try:
+        payload = jwt.decode(body.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_data = TokenPayload(**payload)
+    except (jwt.JWTError, ValidationError):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    if token_data.type != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+
+    if not token_data.jti or not token_data.sub:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # Check revocation
+    revoked = await db.execute(select(RevokedToken).where(RevokedToken.jti == token_data.jti))
+    if revoked.scalars().first():
+        raise HTTPException(status_code=401, detail="Refresh token revoked")
+
+    # Check expiry already handled by jwt.decode (exp)
+    try:
+        user_id = int(token_data.sub)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    # Revoke old refresh token (rotation)
+    try:
+        exp_ts = token_data.exp or 0
+        expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc) if exp_ts else datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        db.add(RevokedToken(jti=token_data.jti, user_id=user.id, expires_at=expires_at))
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Could not rotate token")
+
+    # Issue new pair
+    new_access = security.create_access_token(user.id)
+    new_refresh = security.create_refresh_token(user.id)
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
+
+
+@router.post("/logout")
+@limiter.limit("10/minute")
+async def logout(
+    request: Request,
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+    token: str = Depends(deps.reusable_oauth2),
+) -> Any:
+    """
+    Revoke current access token (and optionally refresh token if provided in body).
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_data = TokenPayload(**payload)
+    except (jwt.JWTError, ValidationError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if token_data.jti:
+        try:
+            exp_ts = token_data.exp or 0
+            expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc) if exp_ts else datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            db.add(RevokedToken(jti=token_data.jti, user_id=current_user.id, expires_at=expires_at))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise HTTPException(status_code=500, detail="Could not revoke token")
+
+    return {"detail": "Successfully logged out"}
+
 
 @router.post("/register", response_model=UserOut)
 @limiter.limit("3/minute")

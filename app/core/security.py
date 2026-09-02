@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from typing import Any, Union
 from datetime import datetime, timedelta, timezone
 from jose import jwt
@@ -14,13 +15,36 @@ pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 def create_access_token(
     subject: Union[str, Any], expires_delta: timedelta | None = None
 ) -> str:
+    now = datetime.now(timezone.utc)
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    to_encode = {"exp": expire, "sub": str(subject)}
+        expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "exp": expire,
+        "iat": now,
+        "sub": str(subject),
+        "jti": str(uuid.uuid4()),
+        "type": "access",
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(
+    subject: Union[str, Any], expires_delta: timedelta | None = None
+) -> str:
+    now = datetime.now(timezone.utc)
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode = {
+        "exp": expire,
+        "iat": now,
+        "sub": str(subject),
+        "jti": str(uuid.uuid4()),
+        "type": "refresh",
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
