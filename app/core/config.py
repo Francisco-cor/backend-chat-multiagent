@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Set, Any
 
@@ -13,6 +14,25 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters (got %d)" % len(v))
+        weak = {"secret", "changeme", "password", "test", "123456", "default", "secretkey"}
+        if v.lower() in weak:
+            raise ValueError("SECRET_KEY is too weak")
+        return v
+
+    @field_validator("ALGORITHM")
+    @classmethod
+    def validate_algorithm(cls, v: str) -> str:
+        allowed = {"HS256", "HS384", "HS512", "RS256"}
+        if v not in allowed:
+            raise ValueError(f"ALGORITHM must be one of {allowed}")
+        return v
 
     # CORS — set specific origins in production (e.g. "https://app.example.com,https://admin.example.com")
     # Wildcard "*" disables credentials automatically (browser enforces this).
