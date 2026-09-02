@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clara Playground — Multi-Agent Chat</title>
+<style>
+  :root{--bg:#0b1020;--fg:#e6e8ef;--muted:#9aa3b2;--accent:#6b8cff;--card:#151a2e;--border:#23294a}
+  *{box-sizing:border-box;font-family:ui-sans-system,system-ui,Segoe UI,Roboto}
+  body{margin:0;background:var(--bg);color:var(--fg)}
+  header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  header h1{margin:0;font-size:18px}
+  header input,header select{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg)}
+  header button{padding:8px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  .wrap{max-width:960px;margin:0 auto;padding:18px;display:grid;grid-template-columns:280px 1fr;gap:16px}
+  @media(max-width:800px){.wrap{grid-template-columns:1fr}}
+  aside,main{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  aside{padding:12px}
+  .conv{padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+  .conv.active{background:#1d2444;border-color:var(--accent)}
+  .conv:hover{background:#1a2040}
+  #messages{height:55vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:85%;padding:10px 12px;border-radius:12px;line-height:1.4;white-space:pre-wrap}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+  .msg.assistant{align-self:flex-start;background:#222845;border-bottom-left-radius:4px}
+  .meta{font-size:11px;color:var(--muted);margin-top:4px}
+  #composer{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:#11162e}
+  #composer textarea{flex:1;resize:none;padding:10px;border-radius:10px;border:1px solid var(--border);background:#0f1430;color:var(--fg);min-height:44px}
+  #composer button{padding:10px 16px;border-radius:10px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  #status{font-size:12px;color:var(--muted);padding:6px 12px}
+  code{font-size:12px;background:#0f1430;padding:2px 6px;border-radius:6px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Clara Playground</h1>
+  <input id="baseUrl" value="http://localhost:8005" size="26" title="API base" />
+  <input id="token" placeholder="JWT or sk_..." size="36" />
+  <select id="model">
+    <option>gemini-3.1-pro</option>
+    <option>gemini-3-flash</option>
+    <option>gpt-5.4-mini</option>
+    <option>gpt-5.4-medium</option>
+    <option>claude-sonnet-4-6</option>
+  </select>
+  <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="useSearch" /> search</label>
+  <button id="btnLogin">Login demo</button>
+  <a href="/docs" target="_blank" style="margin-left:auto">/docs</a>
+</header>
+
+<div class="wrap">
+  <aside>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Conversations</strong>
+      <button id="btnNew" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#1d2444;color:var(--fg);cursor:pointer">New</button>
+    </div>
+    <div id="convList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+    <div style="margin-top:12px;font-size:12px;color:var(--muted)">
+      <div>SDK: <code>from backend_chat_sdk import Client</code></div>
+      <div style="margin-top:6px"><a href="#" id="loadStream">Test /stream SSE</a> • <a href="#" id="loadOrch">Test /orchestrate</a></div>
+    </div>
+  </aside>
+  <main>
+    <div id="messages"></div>
+    <div id="status">Ready. Set JWT or API key, pick model, and chat.</div>
+    <div id="composer">
+      <textarea id="prompt" placeholder="Ask Clara... (Enter to send, Shift+Enter newline)" rows="1"></textarea>
+      <button id="btnSend">Send</button>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const baseUrl = () => $("baseUrl").value.replace(/\/$/, "");
+const token = () => $("token").value.trim();
+function authHeaders(){
+  const t = token();
+  if(!t) return {};
+  if(t.startsWith("sk_")) return {"Authorization":"Bearer "+t, "X-API-Key": t};
+  return {"Authorization":"Bearer "+t};
+}
+let currentSession = "play-" + Math.random().toString(36).slice(2,8);
+let convId = null; // for /conversations pagination if needed
+
+function addMsg(role, content, meta=""){
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + (role==="user"?"user":"assistant");
+  wrap.textContent = content;
+  if(meta){
+    const m = document.createElement("div");
+    m.className="meta";
+    m.textContent = meta;
+    wrap.appendChild(m);
+  }
+  $("messages").appendChild(wrap);
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+
+async function loadConversations(){
+  try{
+    const r = await fetch(baseUrl()+"/api/v1/conversations?limit=20", {headers: authHeaders()});
+    if(!r.ok) return;
+    const data = await r.json();
+    const list = $("convList");
+    list.innerHTML="";
+    (data.items||[]).forEach(c=>{
+      const d=document.createElement("div");
+      d.className="conv"+(c.legacy_session_id===currentSession?" active":"");
+      d.textContent=(c.title||c.legacy_session_id||("(no title)")) + " • "+(c.total_tokens||0)+" tok";
+      d.onclick=()=>{
+        currentSession=c.legacy_session_id||String(c.id);
+        convId=c.id;
+        loadMessages(c.id);
+        document.querySelectorAll(".conv").forEach(x=>x.classList.remove("active"));
+        d.classList.add("active");
+      };
+      list.appendChild(d);
+    });
+  }catch(e){ console.warn(e)}
+}
+
+async function loadMessages(cid){
+  $("messages").innerHTML="";
+  try{
+    const r=await fetch(baseUrl()+`/api/v1/conversations/${cid}/messages?limit=50`, {headers: authHeaders()});
+    if(!r.ok){ $("status").textContent="Load messages: "+r.status; return;}
+    const data=await r.json();
+    (data.items||[]).forEach(m=> addMsg(m.role, m.content, m.tokens? (m.tokens+" tok"):""));
+  }catch(e){ $("status").textContent=String(e)}
+}
+
+$("btnNew").onclick = ()=>{
+  currentSession="play-"+Math.random().toString(36).slice(2,8);
+  convId=null;
+  $("messages").innerHTML="";
+  $("status").textContent="New session "+currentSession;
+};
+
+$("btnLogin").onclick= async ()=>{
+  const email=prompt("Email for demo register/login","demo@playground.io");
+  if(!email) return;
+  const pwd=prompt("Password (min 12, upper+lower+digit+special)","ClaraDemo!123");
+  if(!pwd) return;
+  // try register then login
+  await fetch(baseUrl()+"/api/v1/auth/register", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pwd})});
+  const r=await fetch(baseUrl()+"/api/v1/auth/login", {method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:email,password:pwd})});
+  if(!r.ok){ alert("login failed "+r.status); return;}
+  const j=await r.json();
+  $("token").value=j.access_token;
+  $("status").textContent="Logged in as "+email;
+  loadConversations();
+};
+
+async function sendPrompt(prompt){
+  const model=$("model").value;
+  const use_search=$("useSearch").checked;
+  addMsg("user", prompt);
+  $("status").textContent="Streaming...";
+  const body={session_id: currentSession, prompt, model, use_search};
+  // try SSE streaming first
+  try{
+    const r=await fetch(baseUrl()+"/api/v1/chat/stream", {method:"POST", headers: {...authHeaders(), "Content-Type":"application/json"}, body: JSON.stringify(body)});
+    if(!r.ok || !r.body){
+      // fallback JSON
+      const j=await r.json().catch(()=>null);
+      $("status").textContent="Stream fallback "+r.status;
+      if(j && j.reply) addMsg("assistant", j.reply);
+      return;
+    }
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    let buf=""; let assistant=""; let accDiv=null;
+    accDiv=document.createElement("div");
+    accDiv.className="msg assistant"; accDiv.textContent=""; $("messages").appendChild(accDiv);
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      buf+=decoder.decode(value,{stream:true});
+      const parts=buf.split("\n\n"); buf=parts.pop()||"";
+      for(const part of parts){
+        for(const line of part.split("\n")){
+          if(line.startsWith("data:")){
+            const data=line.slice(5).trim();
+            if(data==="[DONE]"){ $("status").textContent="Done"; break; }
+            try{
+              const obj=JSON.parse(data);
+              if(obj.delta){ assistant+=obj.delta; accDiv.textContent=assistant; $("messages").scrollTop=$("messages").scrollHeight; }
+              if(obj.error){ accDiv.textContent+="\n[error] "+obj.error; }
+            }catch{}
+          }
+        }
+      }
+    }
+    if(!assistant) accDiv.remove();
+    $("status").textContent="Done • "+assistant.length+" chars";
+    loadConversations();
+  }catch(e){
+    $("status").textContent="Error: "+e;
+  }
+}
+
+$("btnSend").onclick=()=>{
+  const p=$("prompt").value.trim();
+  if(!p) return;
+  $("prompt").value="";
+  sendPrompt(p);
+};
+$("prompt").addEventListener("keydown", e=>{
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("btnSend").click(); }
+});
+
+$("loadStream").onclick=(e)=>{ e.preventDefault(); sendPrompt("Hello Clara, stream test "+Date.now()); };
+$("loadOrch").onclick= async (e)=>{
+  e.preventDefault();
+  const prompt="Investiga las ventajas de FastAPI y analiza en 3 bullets";
+  addMsg("user", prompt);
+  const r=await fetch(baseUrl()+"/api/v1/chat/orchestrate", {method:"POST", headers:{...authHeaders(),"Content-Type":"application/json"}, body:JSON.stringify({session_id: currentSession, prompt, model: $("model").value, strategy:"auto"})});
+  const j=await r.json();
+  addMsg("assistant", j.reply||JSON.stringify(j), "trace "+(j.trace||[]).length+" agents");
+};
+
+// init
+loadConversations();
+</script>
+</body>
+</html>

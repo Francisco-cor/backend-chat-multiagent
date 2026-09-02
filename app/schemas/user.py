@@ -1,11 +1,11 @@
 import re
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # Shared properties
 class UserBase(BaseModel):
-    email: Optional[EmailStr] = None
-    is_active: Optional[bool] = True
+    email: Optional[EmailStr] = Field(None, examples=["user@example.com", "clara@demo.io"])
+    is_active: Optional[bool] = Field(True, examples=[True])
 
 # Common passwords blocklist
 _COMMON_PASSWORDS = {
@@ -28,8 +28,8 @@ _COMMON_PASSWORDS = {
 
 # Properties to receive via API on creation
 class UserCreate(UserBase):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., examples=["newuser@example.com"])
+    password: str = Field(..., min_length=12, examples=["Str0ngPass!123", "ClaraSecr3t!2026"])
 
     @field_validator("password")
     @classmethod

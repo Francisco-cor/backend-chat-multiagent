@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backend-chat-sdk"
+version = "3.5.0"
+description = "Python SDK for Multi-Agent Chat Backend — Fase 10.3"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.27", "pydantic>=2.0"]
+authors = [{name="Clara Platform"}]
+license = {text="MIT"}
+
+[project.urls]
+Homepage = "https://github.com/Francisco-cor/backend-chat-multiagent"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend_chat_sdk*"]

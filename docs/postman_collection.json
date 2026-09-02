@@ -1,0 +1,239 @@
+{
+  "info": {
+    "name": "Backend Multi-Agent — Postman",
+    "description": "Fase 10.5 — collection for auth, chat, conversations, RAG, platform, playground. Base {{base_url}}. Use Bearer JWT or X-API-Key sk_...",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "auth",
+      "item": [
+        {
+          "name": "register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{email}}\",\"password\":\"Str0ng!Pass123\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api","v1","auth","register"] }
+          }
+        },
+        {
+          "name": "login (get JWT+refresh)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": { "mode": "urlencoded", "urlencoded": [{ "key": "username", "value": "{{email}}" },{ "key": "password", "value": "Str0ng!Pass123" }] },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          }
+        },
+        {
+          "name": "refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"refresh_token\":\"{{refresh_token}}\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api","v1","auth","refresh"] }
+          }
+        },
+        {
+          "name": "logout (revoke jti)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api","v1","auth","logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "item": [
+        {
+          "name": "chat JSON",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"session_id\":\"sess1\",\"prompt\":\"Hello Clara\",\"model\":\"gemini-3.1-pro\",\"use_search\":false}" },
+            "url": { "raw": "{{base_url}}/api/v1/chat/", "host": ["{{base_url}}"], "path": ["api","v1","chat",""] }
+          }
+        },
+        {
+          "name": "chat stream SSE (resilient)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" },{ "key": "Last-Event-ID", "value": "0" }],
+            "body": { "mode": "raw", "raw": "{\"session_id\":\"sess1\",\"prompt\":\"hi stream\",\"model\":\"gemini-3.1-pro\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/chat/stream", "host": ["{{base_url}}"], "path": ["api","v1","chat","stream"] }
+          }
+        },
+        {
+          "name": "chat upload (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "session_id", "value": "sess1" },{ "key": "prompt", "value": "summarize" },{ "key": "file", "type": "file", "src": [] }] },
+            "url": { "raw": "{{base_url}}/api/v1/chat/upload", "host": ["{{base_url}}"], "path": ["api","v1","chat","upload"] }
+          }
+        },
+        {
+          "name": "orchestrate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"session_id\":\"sess1\",\"prompt\":\"Investiga X y analiza\",\"model\":\"gemini-3.1-pro\",\"strategy\":\"auto\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/chat/orchestrate", "host": ["{{base_url}}"], "path": ["api","v1","chat","orchestrate"] }
+          }
+        },
+        {
+          "name": "orchestrate stream",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"session_id\":\"sess1\",\"prompt\":\"Investiga X\",\"strategy\":\"auto\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/chat/orchestrate/stream", "host": ["{{base_url}}"], "path": ["api","v1","chat","orchestrate","stream"] }
+          }
+        },
+        {
+          "name": "chat via API key (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"session_id\":\"sess1\",\"prompt\":\"hi via key\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/chat/", "host": ["{{base_url}}"], "path": ["api","v1","chat",""] }
+          }
+        },
+        {
+          "name": "list agents",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/chat/agents", "host": ["{{base_url}}"], "path": ["api","v1","chat","agents"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "conversations",
+      "item": [
+        {
+          "name": "list (cursor)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/conversations?limit=20", "host": ["{{base_url}}"], "path": ["api","v1","conversations"], "query": [{ "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/conversations/1/messages?limit=50", "host": ["{{base_url}}"], "path": ["api","v1","conversations","1","messages"], "query": [{ "key": "limit", "value": "50" }] }
+          }
+        },
+        {
+          "name": "patch title",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"title\":\"New title\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/conversations/1", "host": ["{{base_url}}"], "path": ["api","v1","conversations","1"] }
+          }
+        },
+        {
+          "name": "delete (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/conversations/1", "host": ["{{base_url}}"], "path": ["api","v1","conversations","1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "RAG/documents/files",
+      "item": [
+        {
+          "name": "upload document (RAG ingest)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": [] },{ "key": "title", "value": "My doc" }] },
+            "url": { "raw": "{{base_url}}/api/v1/documents/upload", "host": ["{{base_url}}"], "path": ["api","v1","documents","upload"] }
+          }
+        },
+        {
+          "name": "presign S3/MinIO",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"file_name\":\"test.pdf\",\"mime_type\":\"application/pdf\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/files/presign", "host": ["{{base_url}}"], "path": ["api","v1","files","presign"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "platform",
+      "item": [
+        {
+          "name": "create API key",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" },{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"cli\",\"scopes\":[\"chat:write\",\"chat:read\"],\"expires_in_days\":30}" },
+            "url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api","v1","api-keys"] }
+          }
+        },
+        {
+          "name": "list API keys",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api","v1","api-keys"] }
+          }
+        },
+        {
+          "name": "billing usage",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/billing/usage", "host": ["{{base_url}}"], "path": ["api","v1","billing","usage"] }
+          }
+        },
+        {
+          "name": "billing ledger",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/billing/ledger?limit=10", "host": ["{{base_url}}"], "path": ["api","v1","billing","ledger"], "query": [{ "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "admin list users (superuser)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/admin/users", "host": ["{{base_url}}"], "path": ["api","v1","admin","users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "health & misc",
+      "item": [
+        { "name": "health live", "request": { "method": "GET", "url": { "raw": "{{base_url}}/health/live", "host": ["{{base_url}}"], "path": ["health","live"] } } },
+        { "name": "health ready", "request": { "method": "GET", "url": { "raw": "{{base_url}}/health/ready", "host": ["{{base_url}}"], "path": ["health","ready"] } } },
+        { "name": "metrics", "request": { "method": "GET", "url": { "raw": "{{base_url}}/metrics", "host": ["{{base_url}}"], "path": ["metrics"] } } },
+        { "name": "openapi", "request": { "method": "GET", "url": { "raw": "{{base_url}}/openapi.json", "host": ["{{base_url}}"], "path": ["openapi.json"] } } }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8005" },
+    { "key": "email", "value": "user@example.com" },
+    { "key": "jwt", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "api_key", "value": "sk_..." }
+  ]
+}

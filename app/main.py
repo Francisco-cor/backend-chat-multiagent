@@ -16,6 +16,7 @@ from app.db.session import engine
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.metrics import setup_metrics
+from app.core.errors import setup_problem_handlers
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from google import genai
@@ -132,14 +133,66 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Chatbot API (GenAI 2025 Standard)",
-    description="Backend with google-genai v1.51 (Gemini 2.5/3.0) and GPT-5.",
+    description="Backend with google-genai v1.51 (Gemini 2.5/3.0) and GPT-5. Multi-agent orchestration, RAG, tools, streaming.",
     version="3.5.0",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "auth", "description": "JWT + refresh + API keys. Use `POST /auth/login` then `Authorization: Bearer <jwt>` or `X-API-Key: sk_...`"},
+        {"name": "chat", "description": "Direct LLM + streaming (SSE resilient, WS). Quota + rate-limit via Redis; writes UsageLedger."},
+        {"name": "conversations", "description": "Conversations ↔ messages CRUD, cursor pagination, soft-delete, legacy `session_id` alias."},
+        {"name": "documents", "description": "RAG ingest (pdf/txt/md → chunk → embed) + retrieve."},
+        {"name": "files", "description": "S3/MinIO presigned upload."},
+        {"name": "api-keys", "description": "API key lifecycle (hash + scopes + expiry). Scopes: chat:write/read, etc."},
+        {"name": "billing", "description": "Usage ledger + cost aggregation + Stripe webhook stub."},
+        {"name": "admin", "description": "Superuser only (list users, quotas, ban, plan)."},
+        {"name": "ws", "description": "WebSocket `/ws/chat?token=<jwt>` ping/pong, ack, delta streaming."},
+        {"name": "Health", "description": "Liveness `/health/live` (process) vs readiness `/health/ready` (DB+Redis)."},
+        {"name": "Metrics", "description": "Prometheus `/metrics`."},
+    ],
+    contact={"name": "Clara Platform", "url": "https://github.com/Francisco-cor/backend-chat-multiagent"},
+    license_info={"name": "MIT"},
 )
 
-# Connect Limiter to the app
+# Connect Limiter to the app (RFC7807 handler will override 429 formatting; keep slowapi fallback)
 app.state.limiter = limiter
+# Keep fallback then override with ProblemDetails
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+setup_problem_handlers(app)
+
+# --- OpenAPI security schemes (JWT + API-Key) ---
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+    )
+    # Ensure components/securitySchemes exist
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {})
+    openapi_schema["components"]["securitySchemes"]["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT from POST /api/v1/auth/login (`Authorization: Bearer <jwt>`) or `?token=` for WS.",
+    }
+    openapi_schema["components"]["securitySchemes"]["ApiKeyAuth"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key `sk_...` from POST /api/v1/api-keys. Also accepted as `Authorization: Bearer sk_...`. Scopes: chat:write etc.",
+    }
+    # Apply bearer to most paths (optional, not forced)
+    openapi_schema["security"] = [{"BearerAuth": []}, {"ApiKeyAuth": []}]
+    # Add problem+json example to 422/429
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi  # type: ignore[method-assign]
 
 # Metrics inner to CORS but outer to route — added first
 setup_metrics(app)
@@ -164,6 +217,18 @@ app.include_router(api_router, prefix="/api/v1")
 from app.api.v1.endpoints.ws import router as ws_router  # noqa: E402
 
 app.include_router(ws_router)
+
+# Playground static (Fase 10.4) — serve /playground if directory exists
+try:
+    from fastapi.staticfiles import StaticFiles
+    import os as _os
+
+    _play = _os.path.join(_os.path.dirname(__file__), "..", "playground")
+    if _os.path.isdir(_play):
+        app.mount("/playground", StaticFiles(directory=_play, html=True), name="playground")
+        logger.info("Playground mounted at /playground")
+except Exception as e:
+    logger.warning(f"Playground mount failed: {e}")
 
 
 @app.get("/health", tags=["Health"])

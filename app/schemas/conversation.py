@@ -32,13 +32,13 @@ class ConversationOut(BaseModel):
 
 
 class ConversationCreate(BaseModel):
-    session_id: str = Field(..., min_length=1, max_length=128, description="Client session id to map to conversation")
-    title: str | None = Field(None, max_length=255)
-    model: str | None = None
+    session_id: str = Field(..., min_length=1, max_length=128, description="Client session id to map to conversation (legacy alias → conversation.id)", examples=["sess_abc123"])
+    title: str | None = Field(None, max_length=255, examples=["My chat"])
+    model: str | None = Field(None, examples=["gemini-3.1-pro"])
 
 
 class ConversationUpdate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=255)
+    title: str = Field(..., min_length=1, max_length=255, examples=["Renamed title"])
 
 
 class PaginatedConversations(BaseModel):

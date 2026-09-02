@@ -1,0 +1,19 @@
+{
+  "name": "backend-chat-sdk",
+  "version": "3.5.0",
+  "description": "TypeScript SDK for Multi-Agent Chat Backend — Fase 10.3",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["chat", "llm", "sdk"],
+  "author": "Clara Platform",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
