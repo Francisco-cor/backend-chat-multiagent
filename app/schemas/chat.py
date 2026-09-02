@@ -22,6 +22,10 @@ class ChatRequest(BaseModel):
     file_base64: Optional[str] = None
     file_mime_type: Optional[str] = None
 
+    # Audio transcription (Fase 7.3)
+    audio_base64: Optional[str] = None
+    audio_mime_type: Optional[str] = None
+
 
 class ChatUsage(BaseModel):
     prompt_tokens: int

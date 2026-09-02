@@ -216,9 +216,16 @@ async def handle_chat_stream(
     current_user: User = Depends(deps.get_current_user),
 ):
     """
-    Streaming chat via Server-Sent Events (text/event-stream).
-    Each chunk is sent as: data: {"delta": "<text>"}\n\n
-    The stream ends with: data: [DONE]\n\n
+    Streaming chat via Server-Sent Events (text/event-stream) — resilient.
+
+    Features (Fase 7.1):
+     - monotonic id per chunk
+     - retry: 3000 hint
+     - heartbeat : heartbeat every 15s
+     - Last-Event-ID resume from in-memory buffer
+     - backpressure via bounded queue
+    Each chunk is sent as: id: <n>\\ndata: {"delta": "<text>", "id": <n>}\\n\\n
+    The stream ends with: data: [DONE]\\n\\n
     """
     normalized_model = _validate_model_name(request_data.model)
 
@@ -232,29 +239,64 @@ async def handle_chat_stream(
         _validate_base64(request_data.file_base64, "file_base64")
         file_data = {"data": request_data.file_base64, "mime_type": request_data.file_mime_type}
 
+    # Audio transcription — if audio provided, prepend transcript to prompt
+    prompt = request_data.prompt
+    if request_data.audio_base64:
+        _validate_base64(request_data.audio_base64, "audio_base64")
+        from app.services.transcription_service import transcribe_audio
+
+        transcript = await transcribe_audio(
+            request_data.audio_base64,
+            request_data.audio_mime_type or "audio/webm",
+            client=getattr(request.app.state, "openai_client", None),
+        )
+        # If transcript dummy, just append; if real, replace prompt with transcript + prompt
+        prompt = f"{transcript}\n\n{prompt}" if prompt else transcript
+
+    # Parse Last-Event-ID for resume
+    last_event_id_raw = request.headers.get("last-event-id") or request.headers.get("Last-Event-ID")
+    try:
+        last_event_id = int(last_event_id_raw) if last_event_id_raw else 0
+    except ValueError:
+        last_event_id = 0
+
+    async def inner_gen():
+        async for chunk in ChatService.process_chat_stream(
+            session_id=request_data.session_id,
+            prompt=prompt,
+            model_name=normalized_model,
+            db=db,
+            user_id=current_user.id,
+            openai_client=getattr(request.app.state, "openai_client", None),
+            image_data=image_data,
+            file_data=file_data,
+            use_search=request_data.use_search,
+        ):
+            yield chunk
+
+    from app.services.stream_manager import resilient_stream
+
     async def event_generator():
         try:
-            async for chunk in ChatService.process_chat_stream(
-                session_id=request_data.session_id,
-                prompt=request_data.prompt,
-                model_name=normalized_model,
-                db=db,
-                user_id=current_user.id,
-                openai_client=getattr(request.app.state, "openai_client", None),
-                image_data=image_data,
-                file_data=file_data,
-                use_search=request_data.use_search,
+            async for frame in resilient_stream(
+                request_data.session_id,
+                inner_gen(),
+                last_event_id=last_event_id,
+                heartbeat_interval=settings.SSE_HEARTBEAT_SECONDS,
             ):
-                yield f"data: {json.dumps({'delta': chunk})}\n\n"
+                yield frame
+                # SSE spec: also yield heartbeat already inside manager
+            yield "data: [DONE]\n\n"
         except HTTPException as e:
             yield f"data: {json.dumps({'error': e.detail})}\n\n"
+            yield "data: [DONE]\n\n"
         except Exception:
             logger.exception("Error in stream event generator")
             yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
-        finally:
             yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
 @router.get("/agents", response_model=list[AgentInfo])
@@ -337,29 +379,93 @@ async def handle_orchestrate_stream(
         _validate_base64(request_data.file_base64, "file_base64")
         file_data = {"data": request_data.file_base64, "mime_type": request_data.file_mime_type}
 
+    # Parse Last-Event-ID for orchestrate stream too
+    last_event_id_raw = request.headers.get("last-event-id") or request.headers.get("Last-Event-ID")
+    try:
+        last_event_id = int(last_event_id_raw) if last_event_id_raw else 0
+    except ValueError:
+        last_event_id = 0
+
+    async def inner_event_gen():
+        seq = 0
+        async for event in ChatService.process_chat_stream_orchestrated(
+            session_id=request_data.session_id,
+            prompt=request_data.prompt,
+            model_name=normalized_model,
+            db=db,
+            user_id=current_user.id,
+            openai_client=getattr(request.app.state, "openai_client", None),
+            image_data=image_data,
+            file_data=file_data,
+            use_search=request_data.use_search,
+            strategy=request_data.strategy,
+        ):
+            seq += 1
+            # emit as JSON delta per agent
+            yield event
+
+    # We wrap with resilient framing but keep agent event type
+    from app.services.stream_manager import get_buffered
+    import asyncio as _asyncio
+
     async def event_generator():
+        # replay if needed (from in-memory buffer of orchestrate? reuse same buffer key prefixed)
+        buffer_key = f"orch:{request_data.session_id}"
+        if last_event_id:
+            from app.services.stream_manager import get_buffered as _get_buf
+
+            replay = _get_buf(buffer_key, last_event_id)
+            for eid, delta_json in replay:
+                yield f"id: {eid}\ndata: {delta_json}\n\n"
+        yield "retry: 3000\n\n"
+        queue: _asyncio.Queue = _asyncio.Queue(maxsize=20)
+        done = _asyncio.Event()
+
+        async def producer():
+            try:
+                async for ev in inner_event_gen():
+                    await queue.put(ev)
+            except Exception as e:
+                logger.warning(f"Orch stream producer error: {e}")
+                await queue.put(e)  # type: ignore
+            finally:
+                done.set()
+                await queue.put(None)
+
+        prod = _asyncio.create_task(producer())
+        _counter = last_event_id or 0
         try:
-            async for event in ChatService.process_chat_stream_orchestrated(
-                session_id=request_data.session_id,
-                prompt=request_data.prompt,
-                model_name=normalized_model,
-                db=db,
-                user_id=current_user.id,
-                openai_client=getattr(request.app.state, "openai_client", None),
-                image_data=image_data,
-                file_data=file_data,
-                use_search=request_data.use_search,
-                strategy=request_data.strategy,
-            ):
-                # event is dict {agent, event, delta}
-                yield f"event: {event.get('agent','unknown')}\n"
-                yield f"data: {json.dumps(event)}\n\n"
-        except HTTPException as e:
-            yield f"data: {json.dumps({'error': e.detail})}\n\n"
-        except Exception:
-            logger.exception("Error in orchestrate stream")
-            yield f"data: {json.dumps({'error': 'Internal server error'})}\n\n"
+            while True:
+                try:
+                    item = await _asyncio.wait_for(queue.get(), timeout=settings.SSE_HEARTBEAT_SECONDS)
+                except _asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    yield f"data: {json.dumps({'error': str(item)})}\n\n"
+                    break
+                _counter += 1
+                # store for resume
+                from app.services.stream_manager import _buffers, _counters
+
+                _counters[buffer_key] = _counter
+                # keep buffer
+                import json as _json
+
+                payload = _json.dumps(item)
+                _buffers[buffer_key].append((_counter, payload))
+                # SSE with event type = agent
+                agent = item.get("agent", "unknown")
+                yield f"id: {_counter}\nevent: {agent}\ndata: {payload}\n\n"
         finally:
+            prod.cancel()
+            try:
+                await prod
+            except _asyncio.CancelledError:
+                pass
             yield "data: [DONE]\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)

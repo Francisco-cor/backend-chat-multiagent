@@ -1,35 +1,110 @@
-# docker-compose.yml
+# docker-compose.yml — Fase 8.2 production-grade
 services:
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
     ports:
-      - "8005:8005"          # host:container  ← Clave de la Opción A
-    volumes:
-      - ./app:/app/app
+      - "8005:8005"
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chat_user:chat_password@db:5432/chat_db
+      - REDIS_URL=redis://redis:6379/0
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=chat-files
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     container_name: chatbot_backend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend_net
 
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg16
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-    # Exponer Postgres en el host es opcional. Si lo quieres en 5435:
     ports:
-      - "5435:5432"          # host:container (el contenedor escucha 5432)
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: chat_user
+      POSTGRES_PASSWORD: chat_password
+      POSTGRES_DB: chat_db
     env_file:
       - .env
     container_name: chatbot_db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U chat_user -d chat_db"]
       interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - backend_net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    container_name: chatbot_redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - backend_net
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    container_name: chatbot_minio
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - backend_net
+
+  # Optional: OTEL / Jaeger for tracing (Fase 11) — commented for now
+  # otel-collector:
+  #   image: otel/opentelemetry-collector-contrib:latest
+  #   ports:
+  #     - "4317:4317"
 
 volumes:
   postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  backend_net:
+    driver: bridge

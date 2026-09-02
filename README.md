@@ -92,8 +92,8 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Install requirements
 pip install -r requirements.txt
 
-# Start the application server
-uvicorn app.main:app --reload
+# Start the application server (port must match Dockerfile/compose: 8005)
+uvicorn app.main:app --reload --port 8005
 ```
 
 ### 4. Containerized Deployment
@@ -107,17 +107,29 @@ docker-compose up --build
 ## API Documentation
 
 Interactive documentation is available at the following endpoints:
--   **Swagger UI**: `http://localhost:8000/docs`
--   **ReDoc**: `http://localhost:8000/redoc`
+-   **Swagger UI**: `http://localhost:8005/docs`
+-   **ReDoc**: `http://localhost:8005/redoc`
 
 ### API Endpoints
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/auth/register` | User identity registration |
-| `POST` | `/api/v1/auth/token` | JWT access token acquisition |
-| `POST` | `/api/v1/chat/` | Multi-agent communication interface |
-| `GET` | `/` | System health check and model availability |
+| `POST` | `/api/v1/auth/login` | JWT access token acquisition |
+| `POST` | `/api/v1/auth/refresh` | Refresh token rotation |
+| `POST` | `/api/v1/auth/logout` | Revoke refresh token |
+| `POST` | `/api/v1/chat/` | Direct LLM chat |
+| `POST` | `/api/v1/chat/stream` | SSE streaming (resilient, Last-Event-ID, heartbeat) |
+| `POST` | `/api/v1/chat/orchestrate` | Multi-agent orchestration |
+| `POST` | `/api/v1/chat/orchestrate/stream` | Multi-agent SSE per-agent events |
+| `WS` | `/ws/chat?token=...` | WebSocket chat (ping/pong, ack) |
+| `GET` | `/api/v1/conversations` | List conversations (cursor) |
+| `POST` | `/api/v1/documents/upload` | RAG ingest |
+| `POST` | `/api/v1/files/presign` | S3/MinIO presigned upload |
+| `GET` | `/health/live` | Liveness probe |
+| `GET` | `/health/ready` | Readiness (DB+Redis) |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/` | System status |
 
 ---
 

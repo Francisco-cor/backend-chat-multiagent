@@ -71,6 +71,22 @@ class Settings(BaseSettings):
     # MCP
     MCP_SERVERS: List[Dict[str, Any]] = []  # e.g. [{"name": "my_server", "url": "http://localhost:8001", "transport": "sse"}]
 
+    # Streaming / Realtime (Fase 7)
+    SSE_HEARTBEAT_SECONDS: int = 15
+    WS_PING_INTERVAL: int = 30
+
+    # File / S3 (Fase 7.4)
+    S3_ENDPOINT: str | None = None
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_BUCKET: str | None = None
+    S3_REGION: str = "us-east-1"
+
+    # Infra / Redis (Fase 8)
+    REDIS_URL: str | None = None
+    # Optional DB pool size tuning
+    DB_POOL_SIZE: int = 10
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini

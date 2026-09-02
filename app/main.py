@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 from app.core.logging import configure_logging
 from app.core.request_id import RequestIDMiddleware
@@ -24,23 +25,31 @@ import anthropic
 configure_logging(json_logs=settings.JSON_LOGS)
 logger = logging.getLogger("main")
 
+_start_time = time.time()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("STARTUP: Booting system...")
     logger.info(f"Python {sys.version}")
 
-    # 1) Run Alembic migrations — fatal: app cannot serve requests without a DB.
-    try:
-        def _run_migrations():
-            cfg = AlembicConfig("alembic.ini")
-            alembic_command.upgrade(cfg, "head")
+    # 1) Run Alembic migrations — idempotent, fatal only if DB unreachable after retries
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            def _run_migrations():
+                cfg = AlembicConfig("alembic.ini")
+                alembic_command.upgrade(cfg, "head")
 
-        await asyncio.to_thread(_run_migrations)
-        logger.info("DB: Migrations applied.")
-    except Exception as e:
-        logger.critical(f"DB MIGRATION ERROR: {e}")
-        sys.exit(1)
+            await asyncio.to_thread(_run_migrations)
+            logger.info("DB: Migrations applied.")
+            break
+        except Exception as e:
+            logger.warning(f"DB migration attempt {attempt}/{max_retries} failed: {e}")
+            if attempt == max_retries:
+                logger.critical(f"DB MIGRATION ERROR after {max_retries} attempts: {e}")
+                sys.exit(1)
+            await asyncio.sleep(2 * attempt)
 
     # 2) Google GenAI (SDK 2025 Check)
     try:
@@ -63,10 +72,14 @@ async def lifespan(app: FastAPI):
     # 4) Anthropic check
     if settings.ANTHROPIC_API_KEY:
         try:
-            anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            # Store in app.state for reuse (aligns with OpenAI handling)
+            app.state.anthropic_client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
             logger.info("Anthropic Client: Ready.")
         except Exception as e:
             logger.error(f"Anthropic Error: {e}")
+            app.state.anthropic_client = None
+    else:
+        app.state.anthropic_client = None
 
     # 5) Load builtin tools
     try:
@@ -92,7 +105,29 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"MCP registry failed: {e}")
 
+    # 7) Redis check (best-effort)
+    if settings.REDIS_URL:
+        try:
+            import redis.asyncio as redis  # type: ignore
+
+            r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await r.ping()
+            app.state.redis = r
+            logger.info("Redis: Connected.")
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}")
+            app.state.redis = None
+    else:
+        app.state.redis = None
+
     yield  # app runs here
+
+    # Graceful shutdown
+    try:
+        if hasattr(app.state, "redis") and app.state.redis:
+            await app.state.redis.close()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -125,16 +160,58 @@ app.add_middleware(RequestIDMiddleware)
 
 # Include the API router
 app.include_router(api_router, prefix="/api/v1")
+# Also mount WS at root for spec compliance (client expects /ws/chat not /api/v1/ws/chat)
+from app.api.v1.endpoints.ws import router as ws_router  # noqa: E402
+
+app.include_router(ws_router)
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Liveness + readiness probe. Verifies DB connectivity."""
+    """Liveness + readiness probe. Verifies DB connectivity. (Legacy compat — delegates to /health/live)"""
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception:
         raise HTTPException(status_code=503, detail="Database unavailable")
+
+
+@app.get("/health/live", tags=["Health"])
+async def health_live():
+    """Liveness: process is running."""
+    uptime = time.time() - _start_time
+    return {"status": "alive", "uptime_seconds": round(uptime, 2)}
+
+
+@app.get("/health/ready", tags=["Health"])
+async def health_ready():
+    """Readiness: DB + Redis (if configured) must be reachable."""
+    checks = {}
+    # DB
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        checks["database"] = "connected"
+    except Exception as e:
+        logger.warning(f"Readiness DB failed: {e}")
+        raise HTTPException(status_code=503, detail={"status": "not_ready", "checks": {"database": "disconnected"}})
+    # Redis if configured
+    if settings.REDIS_URL:
+        try:
+            r = getattr(app.state, "redis", None)
+            if r is None:
+                import redis.asyncio as redis  # type: ignore
+
+                r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await r.ping()
+            checks["redis"] = "connected"
+        except Exception as e:
+            logger.warning(f"Readiness Redis failed: {e}")
+            raise HTTPException(status_code=503, detail={"status": "not_ready", "checks": {**checks, "redis": "disconnected"}})
+    else:
+        checks["redis"] = "not_configured"
+    return {"status": "ready", "checks": checks}
 
 
 @app.get("/", tags=["Root"])
