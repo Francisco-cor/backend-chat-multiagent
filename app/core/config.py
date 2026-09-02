@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     ORCHESTRATOR_ENABLED: bool = True
     ORCHESTRATOR_STRATEGY: str = "auto"  # auto | sequential | parallel | direct
 
+    # RAG / Embeddings
+    EMBEDDING_PROVIDER: str = "dummy"  # dummy | openai | gemini
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIM: int = 64
+    RAG_TOP_K: int = 4
+    RAG_CHUNK_SIZE: int = 512
+    RAG_CHUNK_OVERLAP: int = 50
+
     # Supported models
     ALLOWED_MODELS_LIST: List[str] = [
         # Google Gemini
