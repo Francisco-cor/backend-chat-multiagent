@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -41,12 +41,49 @@ async def login_access_token(
         await security.verify_password(form_data.password, _DUMMY_HASH)
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
+    # Check lockout before password verification (handle both naive and aware datetimes)
+    if user.locked_until:
+        locked = user.locked_until
+        if locked.tzinfo is None:
+            locked = locked.replace(tzinfo=timezone.utc)
+        if locked > datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=423,
+                detail=f"Account locked until {locked.isoformat()}. Try again later.",
+            )
+
     if not await security.verify_password(form_data.password, user.hashed_password):
+        # Increment failed attempts
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(
+                minutes=settings.LOCKOUT_MINUTES
+            )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
+
+    # Rehash if needed (migrate bcrypt -> argon2) and reset lockout
+    updated = False
+    if security.needs_rehash(user.hashed_password):
+        user.hashed_password = await security.get_password_hash(form_data.password)
+        updated = True
+    if user.failed_login_attempts != 0 or user.locked_until is not None:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        updated = True
+    if updated:
+        try:
+            await db.commit()
+            await db.refresh(user)
+        except Exception:
+            await db.rollback()
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return {
         "access_token": security.create_access_token(
